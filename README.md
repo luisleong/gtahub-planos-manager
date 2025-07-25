@@ -23,7 +23,7 @@ Bot de Discord para gestionar planos de negocios en el servidor de GTA RP **GTAH
 
 1. **Clonar el repositorio**
    ```bash
-   git clone https://github.com/tu-usuario/gtahub-planos-manager.git
+   git clone https://github.com/luisleong/gtahub-planos-manager.git
    cd gtahub-planos-manager
    ```
 
