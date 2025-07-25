@@ -149,20 +149,20 @@ export class DatabaseManager {
     private async insertarDatosIniciales(): Promise<void> {
         // Datos iniciales de localizaciones (usando imágenes del repositorio)
         const localizacionesIniciales = [
-            { nombre: 'Cypress', foto_url: 'https://raw.githubusercontent.com/USUARIO/REPO/main/src/images/localizaciones/cypress.png' },
-            { nombre: 'Mesa', foto_url: 'https://raw.githubusercontent.com/USUARIO/REPO/main/src/images/localizaciones/mesa.png' },
-            { nombre: 'Mirror', foto_url: 'https://raw.githubusercontent.com/USUARIO/REPO/main/src/images/localizaciones/mirror.png' },
-            { nombre: 'Bunker', foto_url: 'https://raw.githubusercontent.com/USUARIO/REPO/main/src/images/localizaciones/bunker.png' },
-            { nombre: 'Mansion', foto_url: 'https://raw.githubusercontent.com/USUARIO/REPO/main/src/images/localizaciones/mansion.png' },
-            { nombre: 'Ratonera', foto_url: 'https://raw.githubusercontent.com/USUARIO/REPO/main/src/images/localizaciones/ratonera.png' }
+            { nombre: 'Cypress', foto_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/localizaciones/cypress.png' },
+            { nombre: 'Mesa', foto_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/localizaciones/mesa.png' },
+            { nombre: 'Mirror', foto_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/localizaciones/mirror.png' },
+            { nombre: 'Bunker', foto_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/localizaciones/bunker.png' },
+            { nombre: 'Mansion', foto_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/localizaciones/mansion.png' },
+            { nombre: 'Ratonera', foto_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/localizaciones/ratonera.png' }
         ];
 
         // Datos iniciales de planos (usando iconos SVG del repositorio)
         const planosIniciales = [
-            { nombre: 'Amarillo', icono_url: 'https://raw.githubusercontent.com/USUARIO/REPO/main/src/images/planos/amarillo.svg', duracion_minutos: 600 },
-            { nombre: 'Morado', icono_url: 'https://raw.githubusercontent.com/USUARIO/REPO/main/src/images/planos/morado.svg', duracion_minutos: 360 },
-            { nombre: 'Joyería', icono_url: 'https://raw.githubusercontent.com/USUARIO/REPO/main/src/images/planos/joyeria.svg', duracion_minutos: 1440 },
-            { nombre: 'Arquitectonico', icono_url: 'https://raw.githubusercontent.com/USUARIO/REPO/main/src/images/planos/arquitectonico.svg', duracion_minutos: 1040 }
+            { nombre: 'Amarillo', icono_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/planos/amarillo.svg', duracion_minutos: 600 },
+            { nombre: 'Morado', icono_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/planos/morado.svg', duracion_minutos: 360 },
+            { nombre: 'Joyería', icono_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/planos/joyeria.svg', duracion_minutos: 1440 },
+            { nombre: 'Arquitectonico', icono_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/planos/arquitectonico.svg', duracion_minutos: 1040 }
         ];
 
         try {
