@@ -8,6 +8,7 @@ import {
     Message
 } from 'discord.js';
 import { DatabaseManager } from '../database/DatabaseManager';
+import { getFabricacionProgress } from '../utils/progressBar';
 
 export class MensajesPersistentesManager {
     private client: Client;
@@ -57,15 +58,44 @@ export class MensajesPersistentesManager {
             let estadoTexto = '🟢 **DISPONIBLE**';
             let estadoDescripcion = 'Lista para colocar planos';
             let color = 0x57F287; // Verde
+            let progressInfo = '';
+            let tituloConEstado = `🏗️ ${localizacion.nombre.toUpperCase()}`;
             
             if (tieneCompletado) {
                 estadoTexto = '🔵 **PLANOS LISTOS**';
                 estadoDescripcion = '¡Listos para recoger!';
                 color = 0x5865F2; // Azul
+                tituloConEstado = `🏗️ ${localizacion.nombre.toUpperCase()} • 🔵 PLANOS LISTOS`;
+                
+                // Mostrar información de planos completados
+                const completados = fabricacionesActivas.filter((f: any) => f.listo_para_recoger);
+                progressInfo = completados.map((f: any) => 
+                    `✅ **${f.plano_nombre}** • ${f.propietario}`
+                ).join('\n');
+                                
             } else if (tieneEnProceso) {
                 estadoTexto = '🟡 **EN PROCESO**';
-                estadoDescripcion = 'Fabricando planos...';
+                estadoDescripcion = '';
                 color = 0xFEE75C; // Amarillo
+                tituloConEstado = `🏗️ ${localizacion.nombre.toUpperCase()} • 🟡 EN PROCESO`;
+                
+                // Mostrar barras de progreso para planos en proceso
+                const enProceso = fabricacionesActivas.filter((f: any) => !f.listo_para_recoger);
+                console.log(`🔍 DEBUG: Fabricaciones en proceso encontradas: ${enProceso.length}`);
+                
+                progressInfo = enProceso.map((f: any) => {
+                    console.log(`🔍 DEBUG: Procesando fabricación ${f.id} - ${f.plano_nombre}`);
+                    console.log(`🔍 DEBUG: timestamp_colocacion: ${f.timestamp_colocacion}`);
+                    console.log(`🔍 DEBUG: plano_duracion: ${f.plano_duracion}`);
+                    
+                    const progress = getFabricacionProgress(f.timestamp_colocacion, f.plano_duracion);
+                    
+                    return [
+                        `🔨 **${f.plano_nombre}** • ${f.propietario}`,
+                        `${progress.progressBar} ${progress.percentage}%`,
+                        `⏱️ ${progress.timeRemainingText} restante`
+                    ].join('\n');
+                }).join('\n\n');
             }
 
             // Si hay planos completados y se debe notificar
@@ -78,13 +108,40 @@ export class MensajesPersistentesManager {
             }
 
             // Actualizar embed
+            const ahora = new Date();
+            const fechaFormateada = ahora.toLocaleString('es-ES', { 
+                timeZone: 'Europe/Madrid',
+                year: 'numeric',
+                month: '2-digit', 
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+
+            // Construir descripción con timestamp siempre presente
+            let descripcionCompleta = '';
+            if (estadoDescripcion) {
+                descripcionCompleta = `${estadoDescripcion}\n\n`;
+            }
+            descripcionCompleta += `📅 **Actualizado el:** ${fechaFormateada}`;
+
             const embed = new EmbedBuilder()
-                .setTitle(`🏗️ ${localizacion.nombre.toUpperCase()}`)
-                .setDescription(`${estadoTexto}\n${estadoDescripcion}`)
+                .setTitle(tituloConEstado)
+                .setDescription(descripcionCompleta)
                 .setColor(color)
                 .setImage(localizacion.foto_url || null)
                 .setFooter({ text: 'GTAHUB Planos Manager • Actualización automática' })
                 .setTimestamp();
+
+            // Solo agregar campo de progresso si hay información y no mostrar título redundante
+            if (progressInfo) {
+                embed.addFields({
+                    name: tieneCompletado ? '📦 Planos Completados' : 'Progreso de Fabricación',
+                    value: progressInfo,
+                    inline: false
+                });
+            }
 
             // Actualizar botones
             const row = new ActionRowBuilder<ButtonBuilder>()

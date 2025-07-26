@@ -137,6 +137,11 @@ export async function execute(interaction: ChatInputCommandInteraction) {
             });
         }
 
+        // Limpiar IDs de mensajes persistentes en la base de datos
+        for (const loc of localizaciones) {
+            await dbManager.limpiarMensajePersistente(loc.id);
+        }
+
         await interaction.editReply({
             content: `🧹 Canal limpiado (${mensajesBorrados} mensajes borrados)\n📝 Creando mensajes persistentes...`
         });

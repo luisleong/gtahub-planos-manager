@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Collection, REST, Routes, TextInputBuilder, ActionRowBuilder, ButtonBuilder, EmbedBuilder, ModalBuilder, TextInputStyle, ButtonStyle, StringSelectMenuBuilder } from 'discord.js';
+import { Client, GatewayIntentBits, Collection, REST, Routes, TextInputBuilder, ActionRowBuilder, ButtonBuilder, EmbedBuilder, ModalBuilder, TextInputStyle, ButtonStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { readdirSync } from 'fs';
 import { join } from 'path';
 import dotenv from 'dotenv';
@@ -21,6 +21,7 @@ declare module 'discord.js' {
 class GTAHUBPlanosBot {
     private client: Client;
     private rest: REST;
+    private fabricacionLocks: Set<string> = new Set(); // Para evitar doble ejecución
 
     constructor() {
         // Configurar cliente de Discord
@@ -92,6 +93,11 @@ class GTAHUBPlanosBot {
             // Inicializar base de datos
             await this.client.db.initialize();
             console.log('🗄️ Base de datos inicializada');
+            
+            // Iniciar actualizaciones automáticas cada 5 minutos
+            console.log('🔧 Iniciando sistema de actualizaciones automáticas...');
+            this.iniciarActualizacionesAutomaticas();
+            console.log('✅ Sistema de actualizaciones automáticas configurado');
         });
 
         // Manejo de comandos slash y componentes
@@ -130,15 +136,16 @@ class GTAHUBPlanosBot {
                     const errorMessage = 'Hubo un error ejecutando este comando.';
                     
                     if (interaction.replied || interaction.deferred) {
-                        await interaction.followUp({ content: errorMessage, ephemeral: true });
+                        await interaction.followUp({ content: errorMessage, flags: MessageFlags.Ephemeral });
                     } else {
-                        await interaction.reply({ content: errorMessage, ephemeral: true });
+                        await interaction.reply({ content: errorMessage, flags: MessageFlags.Ephemeral });
                     }
                 }
             }
 
             // Manejar interacciones de menús de selección
             if (interaction.isStringSelectMenu()) {
+                console.log(`🔍 DEBUG: Menu de selección detectado: "${interaction.customId}"`, { values: interaction.values });
                 try {
                     await this.handleSelectMenuInteraction(interaction);
                 } catch (error) {
@@ -146,7 +153,7 @@ class GTAHUBPlanosBot {
                     if (!interaction.replied) {
                         await interaction.reply({
                             content: '❌ Ocurrió un error procesando tu selección.',
-                            ephemeral: true
+                            flags: MessageFlags.Ephemeral
                         });
                     }
                 }
@@ -161,7 +168,7 @@ class GTAHUBPlanosBot {
                     if (!interaction.replied) {
                         await interaction.reply({
                             content: '❌ Ocurrió un error procesando tu acción.',
-                            ephemeral: true
+                            flags: MessageFlags.Ephemeral
                         });
                     }
                 }
@@ -176,7 +183,7 @@ class GTAHUBPlanosBot {
                     if (!interaction.replied) {
                         await interaction.reply({
                             content: '❌ Ocurrió un error procesando el formulario.',
-                            ephemeral: true
+                            flags: MessageFlags.Ephemeral
                         });
                     }
                 }
@@ -306,6 +313,12 @@ class GTAHUBPlanosBot {
         const { customId, values } = interaction;
         const selectedValue = values[0];
 
+        console.log(`🔍 DEBUG: handleSelectMenuInteraction iniciado`);
+        console.log(`🔍 DEBUG: customId = "${customId}"`);
+        console.log(`🔍 DEBUG: values = ${JSON.stringify(values)}`);
+        console.log(`🔍 DEBUG: selectedValue = "${selectedValue}"`);
+
+        console.log(`🔍 DEBUG: Entrando al switch statement...`);
         switch (customId) {
             case 'select_editar_localizacion':
                 await this.mostrarModalEditarLocalizacion(interaction, parseInt(selectedValue));
@@ -329,15 +342,25 @@ class GTAHUBPlanosBot {
                 console.log('Menús de fabricación rápida manejados por el comando correspondiente');
                 break;
             default:
-                // Verificar si es un menú del panel de localizaciones
-                if (customId.startsWith('select_plano_')) {
-                    await this.handlePanelLocalizacionesPlano(interaction, customId, selectedValue);
-                    break;
-                }
-                // Verificar si es un menú de planos persistentes
+                console.log(`🔍 DEBUG: Llegamos al caso default`);
+                // Verificar si es un menú de planos persistentes PRIMERO (más específico)
+                console.log(`🔍 DEBUG: Verificando si es menú de planos persistentes...`);
+                console.log(`🔍 DEBUG: customId.startsWith('select_plano_persistente_'): ${customId.startsWith('select_plano_persistente_')}`);
                 if (customId.startsWith('select_plano_persistente_')) {
+                    console.log(`🔍 DEBUG: Menu de planos persistentes detectado`);
+                    console.log(`🔍 DEBUG: customId: "${customId}"`);
+                    console.log(`🔍 DEBUG: selectedValue: "${selectedValue}"`);
+                    console.log(`🔍 DEBUG: tipo selectedValue: ${typeof selectedValue}`);
+                    console.log(`🔍 DEBUG: Llamando a handleSeleccionPlanoPersistente...`);
                     await this.handleSeleccionPlanoPersistente(interaction, customId, selectedValue);
-                    break;
+                    console.log(`🔍 DEBUG: handleSeleccionPlanoPersistente completado`);
+                    return; // IMPORTANTE: Salir después de manejar
+                }
+                // Verificar si es un menú del panel de localizaciones (menos específico)
+                if (customId.startsWith('select_plano_') && !customId.includes('persistente')) {
+                    console.log(`🔍 DEBUG: Es un menú de panel de localizaciones`);
+                    await this.handlePanelLocalizacionesPlano(interaction, customId, selectedValue);
+                    return; // IMPORTANTE: Salir después de manejar
                 }
                 console.warn(`Menu de selección no manejado: ${customId}`);
         }
@@ -480,7 +503,7 @@ class GTAHUBPlanosBot {
             const fabricacionId = await this.client.db.crearFabricacion(
                 localizacionId,
                 planoId,
-                interaction.user.displayName || interaction.user.username,
+                interaction.member?.displayName || interaction.user.displayName || interaction.user.username,
                 interaction.user.id,
                 'Fabricación rápida', // nota automática
                 interaction.channelId
@@ -828,35 +851,69 @@ class GTAHUBPlanosBot {
             const locId = parseInt(localizacionId);
 
             if (accion === 'poner') {
+                // Obtener información de la localización
+                const localizacion = await dbManager.obtenerLocalizacionPorId(locId);
+                if (!localizacion) {
+                    await interaction.reply({
+                        content: '❌ Error: Localización no encontrada.',
+                        flags: MessageFlags.Ephemeral
+                    });
+                    return;
+                }
+
                 // Mostrar menú de selección de planos
                 const planos = await dbManager.obtenerPlanos();
                 
                 if (planos.length === 0) {
                     await interaction.reply({
                         content: '❌ No hay planos disponibles. Usa `/agregar-plano` para añadir uno.',
-                        ephemeral: true
+                        flags: MessageFlags.Ephemeral
                     });
                     return;
                 }
 
                 // Crear menú de selección
+                console.log(`🔍 DEBUG: Creando menú de selección para localización ${locId}`);
+                console.log(`🔍 DEBUG: Planos disponibles para menú:`, planos.map((p: any) => `${p.id}:${p.nombre}`));
+                
+                const menuOptions = planos.map((plano: any) => {
+                    const option = {
+                        label: plano.nombre,
+                        description: `⏱️ ${plano.duracion_minutos} min • 📍 Se fabricará en ${localizacion.nombre}`,
+                        value: plano.id.toString(),
+                        emoji: '📋'
+                    };
+                    console.log(`🔍 DEBUG: Opción de menú creada:`, option);
+                    return option;
+                });
+
                 const selectMenu = new StringSelectMenuBuilder()
                     .setCustomId(`select_plano_persistente_${locId}`)
-                    .setPlaceholder('Selecciona el plano a fabricar')
-                    .addOptions(
-                        planos.map((plano: any) => ({
-                            label: plano.nombre,
-                            description: `${plano.duracion_minutos} minutos de fabricación`,
-                            value: plano.id.toString(),
-                            emoji: '📋'
-                        }))
-                    );
+                    .setPlaceholder(`🏗️ Fabricar en ${localizacion.nombre} - Selecciona un plano`)
+                    .addOptions(menuOptions);
 
                 const selectRow = new ActionRowBuilder<StringSelectMenuBuilder>()
                     .addComponents(selectMenu);
 
+                // Crear embed informativo sobre la localización
+                const embed = new EmbedBuilder()
+                    .setTitle('🏗️ Selecciona el Plano a Fabricar')
+                    .setDescription(`Vas a fabricar un plano en **${localizacion.nombre}**`)
+                    .addFields(
+                        { name: '📍 Localización', value: localizacion.nombre, inline: true },
+                        { name: '✅ Estado', value: localizacion.disponible_para_fabricacion ? 'Disponible' : 'No Disponible', inline: true },
+                        { name: '🎯 Acción', value: 'Selecciona un plano del menú', inline: true }
+                    )
+                    .setColor(0x5865F2)
+                    .setTimestamp();
+
+                // Agregar imagen si está disponible
+                if (localizacion.foto_url) {
+                    embed.setThumbnail(localizacion.foto_url);
+                }
+
                 await interaction.reply({
-                    content: '📋 **Selecciona el plano que quieres fabricar:**',
+                    embeds: [embed],
                     components: [selectRow],
                     ephemeral: true
                 });
@@ -909,9 +966,28 @@ class GTAHUBPlanosBot {
      * Manejar selección de plano en mensajes persistentes
      */
     private async handleSeleccionPlanoPersistente(interaction: any, customId: string, planoNombre: string): Promise<void> {
+        const lockKey = `${interaction.user.id}_${customId}_${planoNombre}`;
+        
+        if (this.fabricacionLocks.has(lockKey)) {
+            console.log(`🚫 LOCK: Duplicación bloqueada para ${interaction.user.username} - ${lockKey}`);
+            return;
+        }
+        
+        this.fabricacionLocks.add(lockKey);
+        
         try {
+            console.log(`� MÉTODO 1: handleSeleccionPlanoPersistente INICIADO - Usuario: ${interaction.user.username}`);
+            console.log(`�🔍 DEBUG: handleSeleccionPlanoPersistente iniciado`);
+            console.log(`🔍 DEBUG: customId recibido: "${customId}"`);
+            console.log(`🔍 DEBUG: planoNombre recibido: "${planoNombre}"`);
+            console.log(`🔍 DEBUG: tipo de planoNombre: ${typeof planoNombre}`);
+            
             // Extraer el ID de localización del customId
-            const localizacionId = parseInt(customId.split('_')[3]);
+            const customIdParts = customId.split('_');
+            console.log(`🔍 DEBUG: customId partes:`, customIdParts);
+            
+            const localizacionId = parseInt(customIdParts[3]);
+            console.log(`🔍 DEBUG: localizacionId extraído: ${localizacionId} (tipo: ${typeof localizacionId})`);
 
             const dbManager = this.client.db;
             
@@ -924,16 +1000,22 @@ class GTAHUBPlanosBot {
             console.log(`🔍 DEBUG: Localizaciones disponibles:`, localizaciones.map((l: any) => `${l.id}: ${l.nombre}`));
             console.log(`🔍 DEBUG: Planos disponibles:`, planos.map((p: any) => `${p.id}: ${p.nombre}`));
             
+            // Intentar convertir planoNombre a número
+            const planoId = parseInt(planoNombre);
+            console.log(`🔍 DEBUG: planoNombre convertido a número: ${planoId} (tipo: ${typeof planoId})`);
+            console.log(`🔍 DEBUG: isNaN(planoId): ${isNaN(planoId)}`);
+            
             const localizacion = localizaciones.find((l: any) => l.id === localizacionId);
-            const plano = planos.find((p: any) => p.nombre === planoNombre);
+            const plano = planos.find((p: any) => p.id === planoId);
             
             console.log(`🔍 DEBUG: Localización encontrada:`, localizacion ? `${localizacion.id}: ${localizacion.nombre}` : 'NO ENCONTRADA');
             console.log(`🔍 DEBUG: Plano encontrado:`, plano ? `${plano.id}: ${plano.nombre}` : 'NO ENCONTRADO');
 
             if (!localizacion || !plano) {
+                console.log(`❌ DEBUG: Error - localización: ${!!localizacion}, plano: ${!!plano}`);
                 await interaction.reply({
                     content: '❌ Error: No se encontró la localización o el plano.',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
                 return;
             }
@@ -942,7 +1024,7 @@ class GTAHUBPlanosBot {
             const fabricacionId = await dbManager.crearFabricacion(
                 localizacionId,
                 plano.id,
-                interaction.user.displayName || interaction.user.username,
+                interaction.member?.displayName || interaction.user.displayName || interaction.user.username,
                 interaction.user.id,
                 undefined, // notas
                 interaction.channelId // canal de notificación
@@ -957,7 +1039,7 @@ class GTAHUBPlanosBot {
 
             await interaction.reply({
                 embeds: [embed],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
 
             // Actualizar mensaje persistente
@@ -969,8 +1051,15 @@ class GTAHUBPlanosBot {
             console.error('Error en handleSeleccionPlanoPersistente:', error);
             await interaction.reply({
                 content: '❌ Error al iniciar la fabricación.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
+        } finally {
+            // Limpiar el lock después de 2 segundos para permitir reintentos
+            setTimeout(() => {
+                const lockKey = `${interaction.user.id}_${customId}_${planoNombre}`;
+                this.fabricacionLocks.delete(lockKey);
+                console.log(`🔓 LOCK: Removido ${lockKey}`);
+            }, 2000);
         }
     }
 
@@ -978,7 +1067,17 @@ class GTAHUBPlanosBot {
      * Manejar selección de plano en el panel de localizaciones
      */
     private async handlePanelLocalizacionesPlano(interaction: any, customId: string, planoId: string): Promise<void> {
+        const lockKey = `${interaction.user.id}_${customId}_${planoId}`;
+        
+        if (this.fabricacionLocks.has(lockKey)) {
+            console.log(`🚫 LOCK: Duplicación bloqueada para ${interaction.user.username} - ${lockKey}`);
+            return;
+        }
+        
+        this.fabricacionLocks.add(lockKey);
+        
         try {
+            console.log(`🔴 MÉTODO 2: handlePanelLocalizacionesPlano INICIADO - Usuario: ${interaction.user.username}`);
             // Extraer el ID de localización del customId
             const localizacionId = parseInt(customId.split('_')[2]);
             const planoIdNum = parseInt(planoId);
@@ -1004,7 +1103,7 @@ class GTAHUBPlanosBot {
             const fabricacionId = await dbManager.crearFabricacion(
                 localizacionId,
                 planoIdNum,
-                interaction.user.displayName || interaction.user.username,
+                interaction.member?.displayName || interaction.user.displayName || interaction.user.username,
                 interaction.user.id,
                 undefined, // notas
                 interaction.channelId // canal de notificación
@@ -1030,6 +1129,111 @@ class GTAHUBPlanosBot {
                 content: '❌ Error al iniciar la fabricación.',
                 ephemeral: true
             });
+        } finally {
+            // Limpiar el lock después de 2 segundos para permitir reintentos
+            setTimeout(() => {
+                const lockKey = `${interaction.user.id}_${customId}_${planoId}`;
+                this.fabricacionLocks.delete(lockKey);
+                console.log(`🔓 LOCK: Removido ${lockKey}`);
+            }, 2000);
+        }
+    }
+
+    /**
+     * Iniciar actualizaciones automáticas cada 5 minutos
+     */
+    private iniciarActualizacionesAutomaticas(): void {
+        console.log('🔄 Configurando sistema de actualizaciones automáticas...');
+        
+        // Actualizar inmediatamente al iniciar
+        setTimeout(() => {
+            console.log('⏱️ Ejecutando primera actualización automática...');
+            this.actualizarTodosMensajesPersistentes();
+        }, 10000); // Esperar 10 segundos después del inicio
+
+        // Configurar intervalo de 1 minuto (60,000 ms)
+        const intervalId = setInterval(async () => {
+            console.log('⏰ Ejecutando actualización automática programada...');
+            await this.actualizarTodosMensajesPersistentes();
+        }, 1 * 60 * 1000);
+
+        console.log('🔄 Sistema de actualizaciones automáticas iniciado (cada 1 minuto)');
+        console.log(`🆔 Interval ID: ${intervalId}`);
+    }
+
+    /**
+     * Actualizar todos los mensajes persistentes
+     */
+    private async actualizarTodosMensajesPersistentes(): Promise<void> {
+        try {
+            const ahora = new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid' });
+            console.log(`🔄 [${ahora}] Iniciando actualización automática de mensajes persistentes...`);
+            
+            // Primero, detectar y marcar fabricaciones completadas
+            await this.detectarFabricacionesCompletadas();
+            
+            // Obtener todas las localizaciones que tienen mensajes persistentes
+            const localizaciones = await this.client.db.obtenerTodasLasLocalizaciones();
+            const localizacionesConMensajes = localizaciones.filter((loc: any) => 
+                loc.mensaje_persistente_id && loc.canal_persistente_id
+            );
+
+            console.log(`📍 Encontradas ${localizacionesConMensajes.length} localizaciones con mensajes persistentes`);
+            
+            if (localizacionesConMensajes.length === 0) {
+                console.log('⚠️ No hay mensajes persistentes configurados. Usa /setup-canal-persistente');
+                return;
+            }
+
+            // Actualizar cada mensaje persistente
+            let actualizados = 0;
+            for (const loc of localizacionesConMensajes) {
+                try {
+                    console.log(`🔄 Actualizando mensaje para ${loc.nombre}...`);
+                    await this.client.mensajesPersistentes.actualizarMensajeLocalizacion(loc.id, true); // Notificar si hay completados
+                    actualizados++;
+                    // Pequeña pausa entre actualizaciones para evitar rate limiting
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                } catch (error) {
+                    console.error(`❌ Error actualizando mensaje persistente para ${loc.nombre}:`, error);
+                }
+            }
+
+            console.log(`✅ [${ahora}] Actualización automática completada: ${actualizados}/${localizacionesConMensajes.length} mensajes actualizados`);
+        } catch (error) {
+            console.error('❌ Error en actualización automática:', error);
+        }
+    }
+
+    /**
+     * Detectar fabricaciones que han llegado a 100% y marcarlas como listas
+     */
+    private async detectarFabricacionesCompletadas(): Promise<void> {
+        try {
+            // Obtener todas las fabricaciones en proceso (no recogidas y no marcadas como listas)
+            const fabricaciones = await this.client.db.obtenerFabricaciones();
+            const fabricacionesEnProceso = fabricaciones.filter((f: any) => 
+                !f.recogido && !f.listo_para_recoger
+            );
+
+            console.log(`🔍 Revisando ${fabricacionesEnProceso.length} fabricaciones en proceso para detectar completadas...`);
+
+            for (const fabricacion of fabricacionesEnProceso) {
+                // Importar la función de progreso
+                const { getFabricacionProgress } = await import('./utils/progressBar');
+                const progress = getFabricacionProgress(fabricacion.timestamp_colocacion, fabricacion.plano_duracion);
+
+                if (progress.isCompleted) {
+                    console.log(`🎯 Fabricación completada detectada: ID ${fabricacion.id} - ${fabricacion.plano_nombre} en ${fabricacion.localizacion_nombre}`);
+                    
+                    // Marcar como lista para recoger
+                    await this.client.db.marcarComoListo(fabricacion.id);
+                    
+                    console.log(`✅ Fabricación ${fabricacion.id} marcada como lista para recoger`);
+                }
+            }
+        } catch (error) {
+            console.error('❌ Error detectando fabricaciones completadas:', error);
         }
     }
 

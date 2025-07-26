@@ -154,7 +154,8 @@ export class DatabaseManager {
             { nombre: 'Mirror', foto_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/localizaciones/mirror.png' },
             { nombre: 'Bunker', foto_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/localizaciones/bunker.png' },
             { nombre: 'Mansion', foto_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/localizaciones/mansion.png' },
-            { nombre: 'Ratonera', foto_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/localizaciones/ratonera.png' }
+            { nombre: 'Ratonera', foto_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/localizaciones/ratonera.png' },
+            { nombre: 'Retruco', foto_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/localizaciones/retruco.png' },
         ];
 
         // Datos iniciales de planos (usando iconos SVG del repositorio)
@@ -269,6 +270,24 @@ export class DatabaseManager {
             `;
             
             this.db.run(sql, [mensajeId, canalId, id], function(err) {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(this.changes > 0);
+                }
+            });
+        });
+    }
+
+    public async limpiarMensajePersistente(id: number): Promise<boolean> {
+        return new Promise((resolve, reject) => {
+            const sql = `
+                UPDATE localizaciones 
+                SET mensaje_persistente_id = NULL, canal_persistente_id = NULL, updated_at = CURRENT_TIMESTAMP 
+                WHERE id = ?
+            `;
+            
+            this.db.run(sql, [id], function(err) {
                 if (err) {
                     reject(err);
                 } else {
