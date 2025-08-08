@@ -1210,26 +1210,53 @@ class GTAHUBPlanosBot {
      */
     private async detectarFabricacionesCompletadas(): Promise<void> {
         try {
-            // Obtener todas las fabricaciones en proceso (no recogidas y no marcadas como listas)
-            const fabricaciones = await this.client.db.obtenerFabricaciones();
-            const fabricacionesEnProceso = fabricaciones.filter((f: any) => 
-                !f.recogido && !f.listo_para_recoger
-            );
+            // Usar el método específico para obtener fabricaciones que necesitan notificación
+            // Esto ya incluye el filtro de no notificadas
+            const fabricacionesParaNotificar = await this.client.db.obtenerFabricacionesParaNotificar();
 
-            console.log(`🔍 Revisando ${fabricacionesEnProceso.length} fabricaciones en proceso para detectar completadas...`);
+            console.log(`🔍 Detectadas ${fabricacionesParaNotificar.length} fabricaciones completadas para notificar...`);
 
-            for (const fabricacion of fabricacionesEnProceso) {
-                // Importar la función de progreso
-                const { getFabricacionProgress } = await import('./utils/progressBar');
-                const progress = getFabricacionProgress(fabricacion.timestamp_colocacion, fabricacion.plano_duracion);
-
-                if (progress.isCompleted) {
-                    console.log(`🎯 Fabricación completada detectada: ID ${fabricacion.id} - ${fabricacion.plano_nombre} en ${fabricacion.localizacion_nombre}`);
+            for (const fabricacion of fabricacionesParaNotificar) {
+                console.log(`🎯 Procesando fabricación completada: ID ${fabricacion.id} - ${fabricacion.plano_nombre} en ${fabricacion.localizacion_nombre}`);
+                
+                try {
+                    // Marcar como listo para recoger
+                    const marcadoListo = await this.client.db.marcarComoListo(fabricacion.id);
                     
-                    // Marcar como lista para recoger
-                    await this.client.db.marcarComoListo(fabricacion.id);
-                    
-                    console.log(`✅ Fabricación ${fabricacion.id} marcada como lista para recoger`);
+                    if (marcadoListo) {
+                        console.log(`✅ Fabricación ${fabricacion.id} marcada como lista para recoger`);
+                        
+                        // Enviar notificación si hay canal configurado
+                        if (fabricacion.canal_notificacion) {
+                            try {
+                                const canal = await this.client.channels.fetch(fabricacion.canal_notificacion);
+                                if (canal && 'send' in canal) {
+                                    await canal.send(`🎉 **¡Plano completado!**\n**${fabricacion.plano_nombre}** en **${fabricacion.localizacion_nombre}** está listo para recoger!\n<@${fabricacion.propietario_id}>`);
+                                    console.log(`📢 Notificación enviada para fabricación ${fabricacion.id}`);
+                                    
+                                    // IMPORTANTE: Marcar como notificado para evitar notificaciones repetidas
+                                    const marcadoNotificado = await this.client.db.marcarComoNotificado(fabricacion.id);
+                                    if (marcadoNotificado) {
+                                        console.log(`✅ Fabricación ${fabricacion.id} marcada como notificada - No se enviará más notificaciones`);
+                                    } else {
+                                        console.error(`❌ Error: No se pudo marcar la fabricación ${fabricacion.id} como notificada`);
+                                    }
+                                }
+                            } catch (error) {
+                                console.error(`❌ Error enviando notificación para fabricación ${fabricacion.id}:`, error);
+                            }
+                        } else {
+                            // Si no hay canal configurado, igual marcar como notificado para evitar reprocessamiento
+                            const marcadoNotificado = await this.client.db.marcarComoNotificado(fabricacion.id);
+                            if (marcadoNotificado) {
+                                console.log(`✅ Fabricación ${fabricacion.id} marcada como notificada (sin canal de notificación)`);
+                            }
+                        }
+                    } else {
+                        console.error(`❌ Error: No se pudo marcar la fabricación ${fabricacion.id} como lista`);
+                    }
+                } catch (error) {
+                    console.error(`❌ Error procesando fabricación ${fabricacion.id}:`, error);
                 }
             }
         } catch (error) {

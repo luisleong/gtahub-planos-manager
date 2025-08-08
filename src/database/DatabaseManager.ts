@@ -32,6 +32,7 @@ export interface Fabricacion {
     timestamp_recogida?: string;
     listo_para_recoger: boolean;
     recogido: boolean;
+    notificado: boolean;
     notas?: string;
     canal_notificacion?: string;
     created_at: string;
@@ -105,6 +106,7 @@ export class DatabaseManager {
                     timestamp_recogida TEXT,
                     listo_para_recoger BOOLEAN NOT NULL DEFAULT 0,
                     recogido BOOLEAN NOT NULL DEFAULT 0,
+                    notificado BOOLEAN NOT NULL DEFAULT 0,
                     notas TEXT,
                     canal_notificacion TEXT,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -653,6 +655,20 @@ export class DatabaseManager {
         });
     }
 
+    public async marcarComoNotificado(id: number): Promise<boolean> {
+        return new Promise((resolve, reject) => {
+            const sql = 'UPDATE fabricaciones SET notificado = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?';
+            
+            this.db.run(sql, [id], function(err) {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(this.changes > 0);
+                }
+            });
+        });
+    }
+
     public async marcarComoRecogido(id: number): Promise<boolean> {
         return new Promise((resolve, reject) => {
             const sql = `
@@ -686,6 +702,7 @@ export class DatabaseManager {
                 JOIN planos p ON f.id_plano = p.id
                 WHERE f.listo_para_recoger = 0 
                 AND f.recogido = 0
+                AND f.notificado = 0
                 AND datetime(f.timestamp_colocacion, '+' || p.duracion_minutos || ' minutes') <= datetime('now')
             `;
             
