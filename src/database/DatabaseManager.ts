@@ -53,13 +53,19 @@ export class DatabaseManager {
     private dbPath: string;
 
     constructor() {
-        // Crear directorio data si no existe
-        const dataDir = path.join(process.cwd(), 'data');
-        if (!fs.existsSync(dataDir)) {
-            fs.mkdirSync(dataDir, { recursive: true });
+        // Usar ruta de la base de datos desde .env, o por defecto data/planos.db
+        const dbPathEnv = process.env.DATABASE_PATH;
+        let dbPathFinal: string;
+        if (dbPathEnv) {
+            dbPathFinal = path.isAbsolute(dbPathEnv) ? dbPathEnv : path.join(process.cwd(), dbPathEnv);
+        } else {
+            const dataDir = path.join(process.cwd(), 'data');
+            if (!fs.existsSync(dataDir)) {
+                fs.mkdirSync(dataDir, { recursive: true });
+            }
+            dbPathFinal = path.join(dataDir, 'planos.db');
         }
-
-        this.dbPath = path.join(dataDir, 'planos.db');
+        this.dbPath = dbPathFinal;
         this.db = new sqlite3.Database(this.dbPath);
     }
 
