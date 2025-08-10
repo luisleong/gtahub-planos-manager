@@ -11,6 +11,7 @@ const Localizaciones = () => {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ nombre: '', foto_url: '', disponible_para_fabricacion: true });
+  const [editId, setEditId] = useState(null);
   const [file, setFile] = useState(null);
   const [showImgModal, setShowImgModal] = useState(false);
   const [imgModalSrc, setImgModalSrc] = useState('');
@@ -27,6 +28,17 @@ const Localizaciones = () => {
   const handleOpenModal = () => {
     setForm({ nombre: '', foto_url: '', disponible_para_fabricacion: true });
     setFile(null);
+    setEditId(null);
+    setShowModal(true);
+  };
+  const handleEdit = (loc) => {
+    setForm({
+      nombre: loc.nombre,
+      foto_url: loc.foto_url,
+      disponible_para_fabricacion: loc.disponible_para_fabricacion
+    });
+    setFile(null);
+    setEditId(loc.id);
     setShowModal(true);
   };
 
@@ -73,21 +85,56 @@ const Localizaciones = () => {
       console.log('[FRONT] Respuesta backend upload:', data);
       fotoUrl = data.url;
     }
-    console.log('[FRONT] Creando localización con foto_url:', fotoUrl);
-    const resLoc = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, foto_url: fotoUrl })
-    });
-    const dataLoc = await resLoc.json();
-    console.log('[FRONT] Respuesta backend localización:', dataLoc);
+    let resLoc, dataLoc;
+    try {
+      if (editId) {
+        // Editar localización existente
+        console.log('[FRONT] Editando localización:', editId);
+        resLoc = await fetch(`${API_URL}/${editId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre: form.nombre, foto: fotoUrl, disponible: form.disponible_para_fabricacion })
+        });
+      } else {
+        // Crear nueva localización
+        console.log('[FRONT] Creando localización con foto_url:', fotoUrl);
+        resLoc = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre: form.nombre, foto: fotoUrl, disponible: form.disponible_para_fabricacion })
+        });
+      }
+      if (!resLoc.ok) {
+        const text = await resLoc.text();
+        console.error('[FRONT] Error backend localización:', text);
+        alert('Error al guardar localización: ' + text);
+        return;
+      }
+      dataLoc = await resLoc.json();
+      console.log('[FRONT] Respuesta backend localización:', dataLoc);
+    } catch (err) {
+      console.error('[FRONT] Error inesperado:', err);
+      alert('Error inesperado al guardar localización.');
+      return;
+    }
     setShowModal(false);
     window.location.reload();
   };
 
   const handleDelete = async (id) => {
-    await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
-    window.location.reload();
+    try {
+      const res = await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('[FRONT] Error al borrar localización:', text);
+        alert('Error al borrar localización: ' + text);
+        return;
+      }
+      window.location.reload();
+    } catch (err) {
+      console.error('[FRONT] Error inesperado al borrar localización:', err);
+      alert('Error inesperado al borrar localización.');
+    }
   };
 
   // TODO: handleEdit (similar a agregar, pero con datos precargados)
@@ -123,6 +170,10 @@ const Localizaciones = () => {
                       alt={loc.nombre}
                       style={{ width: 60, borderRadius: 8, cursor: 'pointer' }}
                       onClick={() => { setImgModalSrc(loc.foto_url); setShowImgModal(true); }}
+                      onError={e => {
+                        e.target.onerror = null;
+                        e.target.src = '/assets/images/placeholder.png';
+                      }}
                     />
                   </CTableDataCell>
                   <CTableDataCell>
@@ -133,7 +184,7 @@ const Localizaciones = () => {
                     )}
                   </CTableDataCell>
                   <CTableDataCell>
-                    <CButton color="info" size="sm" className="me-2">
+                    <CButton color="info" size="sm" className="me-2" onClick={() => handleEdit(loc)}>
                       <CIcon icon={cilPencil} />
                     </CButton>
                     <CButton color="danger" size="sm" onClick={() => handleDelete(loc.id)}>
@@ -150,7 +201,15 @@ const Localizaciones = () => {
       <CModal visible={showImgModal} onClose={() => setShowImgModal(false)} size="xl">
         <CModalHeader>Vista de Imagen</CModalHeader>
         <CModalBody style={{ textAlign: 'center' }}>
-          <img src={imgModalSrc} alt="Vista" style={{ maxWidth: '100%', maxHeight: '70vh', borderRadius: 12 }} />
+          <img
+            src={imgModalSrc}
+            alt="Vista"
+            style={{ maxWidth: '100%', maxHeight: '70vh', borderRadius: 12 }}
+            onError={e => {
+              e.target.onerror = null;
+              e.target.src = '/assets/images/placeholder.png';
+            }}
+          />
         </CModalBody>
       </CModal>
       {/* Modal para agregar localización */}

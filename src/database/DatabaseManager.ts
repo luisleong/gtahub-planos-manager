@@ -362,17 +362,13 @@ export class DatabaseManager {
     public async eliminarLocalizacion(id: number): Promise<{ success: boolean; message: string }> {
         return new Promise(async (resolve, reject) => {
             try {
-                // Verificar si hay fabricaciones activas en esta localización
-                const fabricacionesActivas = await this.obtenerFabricacionesPorLocalizacion(id);
-                const tieneActivas = fabricacionesActivas.some(fab => !fab.recogido);
-
-                if (tieneActivas) {
-                    resolve({
-                        success: false,
-                        message: 'No se puede eliminar la localización porque tiene fabricaciones activas.'
+                // Eliminar fabricaciones asociadas primero (en cascada)
+                const sqlFab = 'DELETE FROM fabricaciones WHERE id_localizacion = ?';
+                await new Promise((res, rej) => {
+                    this.db.run(sqlFab, [id], function(err) {
+                        if (err) rej(err); else res(true);
                     });
-                    return;
-                }
+                });
 
                 // Eliminar la localización
                 const sql = 'DELETE FROM localizaciones WHERE id = ?';

@@ -129,7 +129,11 @@ app.get('/localizaciones', async (req: Request, res: Response) => {
 // Crear una localización
 app.post('/localizaciones', async (req: Request, res: Response) => {
     try {
-        const { nombre, foto, disponible } = req.body as { nombre: string; foto: string; disponible?: boolean };
+        let { nombre, foto, disponible } = req.body as { nombre: string; foto?: string; disponible?: boolean };
+        // Si no hay foto, usar la imagen placeholder local
+        if (!foto || foto.trim() === '') {
+            foto = '/assets/images/placeholder.png';
+        }
         const nueva = await db.crearLocalizacion(nombre, foto, disponible ?? true);
         res.status(201).json(nueva);
     } catch (err) {
@@ -153,9 +157,16 @@ app.put('/localizaciones/:id', async (req: Request, res: Response) => {
 app.delete('/localizaciones/:id', async (req: Request, res: Response) => {
     try {
         const id = parseInt(req.params.id);
+        console.log('[BACK] Intentando borrar localización id:', id);
         // Obtener la localización antes de eliminar
         const loc = await db.obtenerLocalizacionPorId(id);
-        await db.eliminarLocalizacion(id);
+        console.log('[BACK] Localización encontrada:', loc);
+        const result = await db.eliminarLocalizacion(id);
+        console.log('[BACK] Resultado de borrado:', result);
+        if (!result.success) {
+            console.log('[BACK] No se pudo borrar:', result.message);
+            return res.status(400).json({ error: result.message });
+        }
 
         // Eliminar imagen asociada si existe
         if (loc && loc.foto_url && loc.foto_url.includes('/clientes/')) {
@@ -165,18 +176,28 @@ app.delete('/localizaciones/:id', async (req: Request, res: Response) => {
                 const filename = match[2];
                 const imgPath = require('path').join(process.cwd(), 'clientes', cliente, 'images', filename);
                 const fs = require('fs');
+                console.log('[BACK] Intentando borrar imagen:', imgPath);
                 if (fs.existsSync(imgPath)) {
                     fs.unlinkSync(imgPath);
+                    console.log('[BACK] Imagen borrada:', imgPath);
                     // git add/commit/push para eliminar de GitHub
                     const { execSync } = require('child_process');
                     execSync(`git add "${imgPath}"`, { cwd: process.cwd() });
                     execSync(`git commit -m "Eliminar imagen: ${filename}"`, { cwd: process.cwd() });
                     execSync(`git push`, { cwd: process.cwd() });
+                    console.log('[BACK] Imagen eliminada de git:', filename);
+                } else {
+                    console.log('[BACK] Imagen no existe en disco:', imgPath);
                 }
+            } else {
+                console.log('[BACK] No se pudo parsear cliente/filename de foto_url:', loc.foto_url);
             }
+        } else {
+            console.log('[BACK] No hay imagen asociada para borrar.');
         }
         res.status(204).send();
     } catch (err) {
+        console.error('[BACK] Error al eliminar localización:', err);
         res.status(500).json({ error: 'Error al eliminar localización', details: String(err) });
     }
 });

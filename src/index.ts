@@ -148,7 +148,6 @@ class GTAHUBPlanosBot {
 
             // Manejar interacciones de menús de selección
             if (interaction.isStringSelectMenu()) {
-                console.log(`🔍 DEBUG: Menu de selección detectado: "${interaction.customId}"`, { values: interaction.values });
                 try {
                     await this.handleSelectMenuInteraction(interaction);
                 } catch (error) {
@@ -864,9 +863,6 @@ class GTAHUBPlanosBot {
                 }
 
                 // Crear menú de selección
-                console.log(`🔍 DEBUG: Creando menú de selección para localización ${locId}`);
-                console.log(`🔍 DEBUG: Planos disponibles para menú:`, planos.map((p: any) => `${p.id}:${p.nombre}`));
-                
                 const menuOptions = planos.map((plano: any) => {
                     const option = {
                         label: plano.nombre,
@@ -874,7 +870,6 @@ class GTAHUBPlanosBot {
                         value: plano.id.toString(),
                         emoji: '📋'
                     };
-                    console.log(`🔍 DEBUG: Opción de menú creada:`, option);
                     return option;
                 });
 
@@ -977,7 +972,6 @@ class GTAHUBPlanosBot {
             const plano = planos.find((p: any) => p.id === planoId);
 
             if (!localizacion || !plano) {
-                console.log(`❌ DEBUG: Error - localización: ${!!localizacion}, plano: ${!!plano}`);
                 await interaction.reply({
                     content: '❌ Error: No se encontró la localización o el plano.',
                     flags: MessageFlags.Ephemeral
