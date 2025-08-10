@@ -49,6 +49,29 @@ export interface FabricacionCompleta extends Fabricacion {
 }
 
 export class DatabaseManager {
+    /**
+     * Editar una localización existente
+     */
+    public async editarLocalizacion(id: number, nombre: string, fotoUrl?: string, disponible: boolean = true): Promise<Localizacion | null> {
+        return new Promise((resolve, reject) => {
+            const sql = 'UPDATE localizaciones SET nombre = ?, foto_url = ?, disponible_para_fabricacion = ? WHERE id = ?';
+            this.db.run(sql, [nombre, fotoUrl, disponible, id], (err) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    // Obtener la localización actualizada
+                    const selectSql = 'SELECT * FROM localizaciones WHERE id = ?';
+                    this.db.get(selectSql, [id], (err2, row) => {
+                        if (err2) {
+                            reject(err2);
+                        } else {
+                            resolve(row as Localizacion || null);
+                        }
+                    });
+                }
+            });
+        });
+    }
     private db: sqlite3.Database;
     private dbPath: string;
 
@@ -67,6 +90,35 @@ export class DatabaseManager {
         }
         this.dbPath = dbPathFinal;
         this.db = new sqlite3.Database(this.dbPath);
+    }
+
+    /**
+     * Actualiza todas las URLs de fotos de localizaciones a la ruta dinámica del cliente actual
+     */
+    public async actualizarTodasLasFotoURLs(): Promise<number> {
+        const cliente = process.env.CLIENTE || 'n-c-s';
+        // Nombres de localizaciones soportadas
+        const nombres = [
+            'Cypress', 'Mesa', 'Mirror', 'Bunker', 'Mansion', 'Ratonera', 'Retruco'
+        ];
+        let actualizados = 0;
+        for (const nombre of nombres) {
+            const nuevaURL = `https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/clientes/${cliente.toLowerCase()}/images/${nombre.toLowerCase()}.png`;
+            await new Promise<void>((resolve, reject) => {
+                this.db.run(
+                    'UPDATE localizaciones SET foto_url = ? WHERE nombre = ?',
+                    [nuevaURL, nombre],
+                    function (err) {
+                        if (err) reject(err);
+                        else {
+                            if (this.changes > 0) actualizados += this.changes;
+                            resolve();
+                        }
+                    }
+                );
+            });
+        }
+        return actualizados;
     }
 
     /**
@@ -155,15 +207,17 @@ export class DatabaseManager {
      * Insertar datos iniciales si no existen
      */
     private async insertarDatosIniciales(): Promise<void> {
-        // Datos iniciales de localizaciones (usando imágenes del repositorio)
+        // Obtener nombre del cliente desde .env o config
+        const cliente = process.env.CLIENTE || 'n-c-s';
+        // Datos iniciales de localizaciones (usando imágenes específicas del cliente)
         const localizacionesIniciales = [
-            { nombre: 'Cypress', foto_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/localizaciones/cypress.png' },
-            { nombre: 'Mesa', foto_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/localizaciones/mesa.png' },
-            { nombre: 'Mirror', foto_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/localizaciones/mirror.png' },
-            { nombre: 'Bunker', foto_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/localizaciones/bunker.png' },
-            { nombre: 'Mansion', foto_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/localizaciones/mansion.png' },
-            { nombre: 'Ratonera', foto_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/localizaciones/ratonera.png' },
-            { nombre: 'Retruco', foto_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/localizaciones/retruco.png' },
+            { nombre: 'Cypress', foto_url: `https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/clientes/${cliente.toLowerCase()}/images/cypress.png` },
+            { nombre: 'Mesa', foto_url: `https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/clientes/${cliente.toLowerCase()}/images/mesa.png` },
+            { nombre: 'Mirror', foto_url: `https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/clientes/${cliente.toLowerCase()}/images/mirror.png` },
+            { nombre: 'Bunker', foto_url: `https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/clientes/${cliente.toLowerCase()}/images/bunker.png` },
+            { nombre: 'Mansion', foto_url: `https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/clientes/${cliente.toLowerCase()}/images/mansion.png` },
+            { nombre: 'Ratonera', foto_url: `https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/clientes/${cliente.toLowerCase()}/images/ratonera.png` },
+            { nombre: 'Retruco', foto_url: `https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/clientes/${cliente.toLowerCase()}/images/retruco.png` },
         ];
 
         // Datos iniciales de planos (usando iconos SVG del repositorio)
@@ -371,7 +425,6 @@ export class DatabaseManager {
     public async crearPlano(nombre: string, duracionMinutos: number, iconoUrl?: string): Promise<number> {
         return new Promise((resolve, reject) => {
             const sql = 'INSERT OR IGNORE INTO planos (nombre, duracion_minutos, icono_url) VALUES (?, ?, ?)';
-            
             this.db.run(sql, [nombre, duracionMinutos, iconoUrl], function(err) {
                 if (err) {
                     reject(err);
@@ -381,6 +434,7 @@ export class DatabaseManager {
             });
         });
     }
+
 
     public async obtenerPlanos(): Promise<Plano[]> {
         return new Promise((resolve, reject) => {

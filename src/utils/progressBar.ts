@@ -80,18 +80,14 @@ export function getElapsedMinutes(timestamp: string): number {
  * @returns Objeto con información de progreso
  */
 export function getFabricacionProgress(timestampColocacion: string, duracionMinutos: number) {
-    console.log(`🔍 DEBUG Progress: timestampColocacion = "${timestampColocacion}"`);
-    console.log(`🔍 DEBUG Progress: duracionMinutos = ${duracionMinutos}`);
+    // ...
     
     const elapsed = getElapsedMinutes(timestampColocacion);
     const remaining = Math.max(0, duracionMinutos - elapsed);
     const percentage = Math.min(100, (elapsed / duracionMinutos) * 100);
     const isCompleted = elapsed >= duracionMinutos;
 
-    console.log(`🔍 DEBUG Progress: elapsed = ${elapsed} minutos`);
-    console.log(`🔍 DEBUG Progress: remaining = ${remaining} minutos`);
-    console.log(`🔍 DEBUG Progress: percentage = ${percentage}%`);
-    console.log(`🔍 DEBUG Progress: isCompleted = ${isCompleted}`);
+    // ...
 
     const progress = {
         elapsed,
@@ -102,8 +98,7 @@ export function getFabricacionProgress(timestampColocacion: string, duracionMinu
         timeRemainingText: formatTimeRemaining(remaining)
     };
 
-    console.log(`🔍 DEBUG Progress: progressBar = "${progress.progressBar}"`);
-    console.log(`🔍 DEBUG Progress: timeRemainingText = "${progress.timeRemainingText}"`);
+    // ...
 
     return progress;
 }

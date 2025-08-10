@@ -101,8 +101,8 @@ async function crearDashboardCompleto(fabricacionesActivas: FabricacionCompleta[
     const recogidos = todasFabricaciones.filter((f: FabricacionCompleta) => f.recogido).length;
     
     headerEmbed.addFields(
-        { name: '⏳ En Proceso', value: `**${enProceso}**`, inline: true },
-        { name: '✅ Listos', value: `**${listos}**`, inline: true },
+/*
+*/
         { name: '📦 Recogidos Hoy', value: `**${recogidos}**`, inline: true }
     );
 

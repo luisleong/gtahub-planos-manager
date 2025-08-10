@@ -51,11 +51,7 @@ export class MensajesPersistentesManager {
                 f.id_localizacion === localizacionId && !f.recogido
             );
 
-            console.log(`🔍 DEBUG MensajesPersistentes: Localizacion ${localizacionId} (${localizacion.nombre})`);
-            console.log(`🔍 DEBUG: Fabricaciones activas encontradas: ${fabricacionesActivas.length}`);
-            fabricacionesActivas.forEach((f: any) => {
-                console.log(`   - ID: ${f.id}, Plano: ${f.plano_nombre}, Propietario: ${f.propietario}, listo_para_recoger: ${f.listo_para_recoger}, recogido: ${f.recogido}`);
-            });
+            // ...
 
             const tieneEnProceso = fabricacionesActivas.some((f: any) => !f.listo_para_recoger);
             // SEPARAR LÓGICAS: 
@@ -64,9 +60,7 @@ export class MensajesPersistentesManager {
             const tieneCompletado = fabricacionesActivas.some((f: any) => f.listo_para_recoger);
             const tieneCompletadoSinNotificar = fabricacionesActivas.some((f: any) => f.listo_para_recoger && !f.notificado);
 
-            console.log(`🔍 DEBUG: tieneEnProceso = ${tieneEnProceso}, tieneCompletado = ${tieneCompletado}`);
-            console.log(`🔍 DEBUG: tieneCompletadoSinNotificar = ${tieneCompletadoSinNotificar}`);
-            console.log(`🔍 DEBUG: Fabricaciones listas pero no notificadas: ${fabricacionesActivas.filter((f: any) => f.listo_para_recoger && !f.notificado).length}`);
+            // ...
 
             // Determinar estado y color
             let estadoTexto = '🟢 **DISPONIBLE**';
@@ -95,12 +89,10 @@ export class MensajesPersistentesManager {
                 
                 // Mostrar barras de progreso para planos en proceso
                 const enProceso = fabricacionesActivas.filter((f: any) => !f.listo_para_recoger);
-                console.log(`🔍 DEBUG: Fabricaciones en proceso encontradas: ${enProceso.length}`);
+                // ...
                 
                 progressInfo = enProceso.map((f: any) => {
-                    console.log(`🔍 DEBUG: Procesando fabricación ${f.id} - ${f.plano_nombre}`);
-                    console.log(`🔍 DEBUG: timestamp_colocacion: ${f.timestamp_colocacion}`);
-                    console.log(`🔍 DEBUG: plano_duracion: ${f.plano_duracion}`);
+                    // ...
                     
                     const progress = getFabricacionProgress(f.timestamp_colocacion, f.plano_duracion);
                     

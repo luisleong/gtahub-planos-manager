@@ -1,3 +1,19 @@
+# Iniciar todos los servicios juntos
+
+Para iniciar el Discord bot, el backend API y el frontend web en ventanas separadas, ejecuta el siguiente script en PowerShell desde la raíz del proyecto:
+
+```powershell
+./start-all.ps1
+```
+
+Esto abrirá tres ventanas:
+- Discord bot (npm run dev)
+- Backend API (npx ts-node src/api/server.ts)
+- Frontend web (npm run dev en la carpeta web)
+
+Puedes acceder a:
+- API Swagger: http://localhost:3001/api-docs
+- Frontend web: http://localhost:5173 (por defecto Vite)
 # 🏗️ GTAHUB Planos Manager
 
 Bot de Discord para gestionar planos de negocios en el servidor de GTA RP **GTAHUB**. Permite trackear tiempos de producción, estados de planos y notificaciones automáticas con cards visuales bonitas.

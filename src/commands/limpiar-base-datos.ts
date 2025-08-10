@@ -1,3 +1,4 @@
+// ...existing code...
 import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } from 'discord.js';
 import { COLORS } from '../utils/embeds';
 

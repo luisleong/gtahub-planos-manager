@@ -1,6 +1,17 @@
 // Script para actualizar las URLs de las fotos de localizaciones para el cliente N.C.S.
 // Ejecuta: node scripts/actualizar_fotos_ncs.js
 
+// Script para actualizar todas las URLs de fotos de localizaciones a la ruta dinámica del cliente
+import { DatabaseManager } from '../src/database/DatabaseManager';
+
+(async () => {
+    const db = new DatabaseManager();
+    await db.initialize();
+    const actualizados = await db.actualizarTodasLasFotoURLs();
+    console.log(`✅ URLs de fotos actualizadas: ${actualizados}`);
+    await db.close();
+})();
+
 const path = require('path');
 const Database = require('better-sqlite3');
 

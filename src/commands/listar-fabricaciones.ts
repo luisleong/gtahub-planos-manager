@@ -2,6 +2,103 @@ import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, ActionR
 import { crearCardFabricacion, crearCardResumen, COLORS } from '../utils/embeds';
 import { FabricacionCompleta } from '../database/DatabaseManager';
 
+/*
+export default {
+    data: new SlashCommandBuilder()
+        .setName('listar-fabricaciones')
+        .setDescription('Ver todas las fabricaciones con cards detalladas')
+        .addStringOption(option =>
+            option.setName('estado')
+                .setDescription('Filtrar por estado de la fabricación')
+                .setRequired(false)
+                .addChoices(
+                    { name: '⏳ En Proceso', value: 'en_proceso' },
+                    { name: '✅ Listos para Recoger', value: 'listo' },
+                    { name: '📦 Recogidos', value: 'recogido' }
+                )
+        )
+        .addUserOption(option =>
+            option.setName('usuario')
+                .setDescription('Ver fabricaciones de un usuario específico')
+                .setRequired(false)
+        )
+        .addBooleanOption(option =>
+            option.setName('solo-resumen')
+                .setDescription('Mostrar solo el resumen estadístico')
+                .setRequired(false)
+        )
+        .addStringOption(option =>
+            option.setName('vista')
+                .setDescription('Estilo de visualización')
+                .setRequired(false)
+                .addChoices(
+                    { name: '🎴 Cards Completas', value: 'cards' },
+                    { name: '📋 Lista Compacta', value: 'lista' },
+                    { name: '📊 Solo Estadísticas', value: 'stats' }
+                )
+        ),
+
+    async execute(interaction: ChatInputCommandInteraction) {
+        await interaction.deferReply();
+
+        try {
+            const estadoFiltro = interaction.options.getString('estado');
+            const usuarioFiltro = interaction.options.getUser('usuario');
+            const soloResumen = interaction.options.getBoolean('solo-resumen') || false;
+            const tipoVista = interaction.options.getString('vista') || 'cards';
+
+            let fabricaciones: FabricacionCompleta[] = [];
+            let titulo = 'Todas las Fabricaciones';
+
+            // Obtener fabricaciones según filtros
+            if (usuarioFiltro) {
+                fabricaciones = await interaction.client.db.obtenerFabricacionesPorUsuario(usuarioFiltro.id);
+                titulo = `Fabricaciones de ${usuarioFiltro.displayName || usuarioFiltro.username}`;
+            } else if (estadoFiltro) {
+                fabricaciones = await interaction.client.db.obtenerFabricacionesPorEstado(estadoFiltro as any);
+                titulo = `Fabricaciones ${formatearEstado(estadoFiltro)}`;
+// ...existing code...
+                    break;
+
+                case 'cards':
+                default:
+                    if (soloResumen) {
+                        const embedResumen = crearCardResumen(fabricaciones, titulo);
+                        await interaction.editReply({ embeds: [embedResumen] });
+                        return;
+                    }
+
+                    // Si hay pocas fabricaciones (3 o menos), mostrar todas las cards
+                    if (fabricaciones.length <= 3) {
+                        const embeds = fabricaciones.map(fabricacion => crearCardFabricacion(fabricacion));
+                        const resumen = crearCardResumen(fabricaciones, titulo);
+                        
+                        await interaction.editReply({ 
+                            embeds: [resumen, ...embeds]
+                        });
+                        return;
+                    }
+
+                    // Si hay muchas fabricaciones, usar menú interactivo
+                    await mostrarConMenu(interaction, fabricaciones, titulo);
+                    break;
+            }
+
+        } catch (error) {
+            console.error('❌ Error en comando listar-fabricaciones:', error);
+            
+            await interaction.editReply({
+                content: '❌ Hubo un error al obtener las fabricaciones. Por favor, inténtalo de nuevo.'
+            });
+        }
+    },
+};
+
+/**
+ * Mostrar vista compacta con lista resumida
+ */
+// ...existing code...
+// ...existing code...
 export default {
     data: new SlashCommandBuilder()
         .setName('listar-fabricaciones')

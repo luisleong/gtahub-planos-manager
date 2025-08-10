@@ -2,6 +2,7 @@ import { Client, GatewayIntentBits, Collection, REST, Routes, TextInputBuilder, 
 import { readdirSync } from 'fs';
 import { join } from 'path';
 import dotenv from 'dotenv';
+import './api/server'; // Inicia el servidor Express y Swagger
 import { ChannelPermissions } from './utils/channelPermissions';
 import MensajesPersistentesManager from './services/MensajesPersistentesManager';
 import { DatabaseManager } from './database/DatabaseManager';
@@ -17,6 +18,8 @@ declare module 'discord.js' {
         mensajesPersistentes: MensajesPersistentesManager;
     }
 }
+
+const config = require('../clientes/n-c-s/config.json');
 
 class GTAHUBPlanosBot {
     private client: Client;
@@ -72,7 +75,7 @@ class GTAHUBPlanosBot {
         try {
             console.log('🔄 Registrando comandos slash...');
             await this.rest.put(
-                Routes.applicationGuildCommands(process.env.CLIENT_ID!, process.env.GUILD_ID!),
+                Routes.applicationGuildCommands(config.CLIENT_ID, config.GUILD_ID),
                 { body: commands },
             );
             console.log('✅ Comandos slash registrados correctamente.');
@@ -313,12 +316,7 @@ class GTAHUBPlanosBot {
         const { customId, values } = interaction;
         const selectedValue = values[0];
 
-        console.log(`🔍 DEBUG: handleSelectMenuInteraction iniciado`);
-        console.log(`🔍 DEBUG: customId = "${customId}"`);
-        console.log(`🔍 DEBUG: values = ${JSON.stringify(values)}`);
-        console.log(`🔍 DEBUG: selectedValue = "${selectedValue}"`);
-
-        console.log(`🔍 DEBUG: Entrando al switch statement...`);
+        // ...
         switch (customId) {
             case 'select_editar_localizacion':
                 await this.mostrarModalEditarLocalizacion(interaction, parseInt(selectedValue));
@@ -342,23 +340,16 @@ class GTAHUBPlanosBot {
                 console.log('Menús de fabricación rápida manejados por el comando correspondiente');
                 break;
             default:
-                console.log(`🔍 DEBUG: Llegamos al caso default`);
-                // Verificar si es un menú de planos persistentes PRIMERO (más específico)
-                console.log(`🔍 DEBUG: Verificando si es menú de planos persistentes...`);
-                console.log(`🔍 DEBUG: customId.startsWith('select_plano_persistente_'): ${customId.startsWith('select_plano_persistente_')}`);
+                // ...
                 if (customId.startsWith('select_plano_persistente_')) {
-                    console.log(`🔍 DEBUG: Menu de planos persistentes detectado`);
-                    console.log(`🔍 DEBUG: customId: "${customId}"`);
-                    console.log(`🔍 DEBUG: selectedValue: "${selectedValue}"`);
-                    console.log(`🔍 DEBUG: tipo selectedValue: ${typeof selectedValue}`);
-                    console.log(`🔍 DEBUG: Llamando a handleSeleccionPlanoPersistente...`);
+                    // ...
                     await this.handleSeleccionPlanoPersistente(interaction, customId, selectedValue);
-                    console.log(`🔍 DEBUG: handleSeleccionPlanoPersistente completado`);
+                    // ...
                     return; // IMPORTANTE: Salir después de manejar
                 }
                 // Verificar si es un menú del panel de localizaciones (menos específico)
                 if (customId.startsWith('select_plano_') && !customId.includes('persistente')) {
-                    console.log(`🔍 DEBUG: Es un menú de panel de localizaciones`);
+                // ...
                     await this.handlePanelLocalizacionesPlano(interaction, customId, selectedValue);
                     return; // IMPORTANTE: Salir después de manejar
                 }
@@ -969,47 +960,21 @@ class GTAHUBPlanosBot {
         const lockKey = `${interaction.user.id}_${customId}_${planoNombre}`;
         
         if (this.fabricacionLocks.has(lockKey)) {
-            console.log(`🚫 LOCK: Duplicación bloqueada para ${interaction.user.username} - ${lockKey}`);
             return;
         }
-        
         this.fabricacionLocks.add(lockKey);
-        
         try {
-            console.log(`� MÉTODO 1: handleSeleccionPlanoPersistente INICIADO - Usuario: ${interaction.user.username}`);
-            console.log(`�🔍 DEBUG: handleSeleccionPlanoPersistente iniciado`);
-            console.log(`🔍 DEBUG: customId recibido: "${customId}"`);
-            console.log(`🔍 DEBUG: planoNombre recibido: "${planoNombre}"`);
-            console.log(`🔍 DEBUG: tipo de planoNombre: ${typeof planoNombre}`);
-            
             // Extraer el ID de localización del customId
             const customIdParts = customId.split('_');
-            console.log(`🔍 DEBUG: customId partes:`, customIdParts);
-            
             const localizacionId = parseInt(customIdParts[3]);
-            console.log(`🔍 DEBUG: localizacionId extraído: ${localizacionId} (tipo: ${typeof localizacionId})`);
-
             const dbManager = this.client.db;
-            
-            console.log(`🔍 DEBUG: Buscando localización ID ${localizacionId} y plano "${planoNombre}"`);
-            
             // Obtener información de la localización y el plano
             const localizaciones = await dbManager.obtenerTodasLasLocalizaciones();
             const planos = await dbManager.obtenerPlanos();
-            
-            console.log(`🔍 DEBUG: Localizaciones disponibles:`, localizaciones.map((l: any) => `${l.id}: ${l.nombre}`));
-            console.log(`🔍 DEBUG: Planos disponibles:`, planos.map((p: any) => `${p.id}: ${p.nombre}`));
-            
             // Intentar convertir planoNombre a número
             const planoId = parseInt(planoNombre);
-            console.log(`🔍 DEBUG: planoNombre convertido a número: ${planoId} (tipo: ${typeof planoId})`);
-            console.log(`🔍 DEBUG: isNaN(planoId): ${isNaN(planoId)}`);
-            
             const localizacion = localizaciones.find((l: any) => l.id === localizacionId);
             const plano = planos.find((p: any) => p.id === planoId);
-            
-            console.log(`🔍 DEBUG: Localización encontrada:`, localizacion ? `${localizacion.id}: ${localizacion.nombre}` : 'NO ENCONTRADA');
-            console.log(`🔍 DEBUG: Plano encontrado:`, plano ? `${plano.id}: ${plano.nombre}` : 'NO ENCONTRADO');
 
             if (!localizacion || !plano) {
                 console.log(`❌ DEBUG: Error - localización: ${!!localizacion}, plano: ${!!plano}`);
