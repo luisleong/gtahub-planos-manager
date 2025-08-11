@@ -18,9 +18,29 @@ const Localizaciones = () => {
 
   useEffect(() => {
     fetch(API_URL)
-      .then(res => res.json())
+      .then(async res => {
+        if (!res.ok) {
+          // Si el backend responde con error, loguea y retorna array vacío
+          const text = await res.text();
+          console.error('[FRONT] Error al cargar localizaciones:', text);
+          setData([]);
+          setLoading(false);
+          return;
+        }
+        return res.json();
+      })
       .then(data => {
-        setData(data);
+        // Si data no es array, fuerza array vacío
+        if (!Array.isArray(data)) {
+          setData([]);
+        } else {
+          setData(data);
+        }
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('[FRONT] Error inesperado al cargar localizaciones:', err);
+        setData([]);
         setLoading(false);
       });
   }, []);

@@ -101,30 +101,47 @@ app.get('/', (req: Request, res: Response) => {
 // Instancia de la base de datos (ajusta el path si usas multi-cliente)
 const db = new DatabaseManager();
 
-// Configuración Swagger (debe ir después de declarar app)
-const swaggerOptions = {
-  definition: {
-    openapi: '3.0.0',
-    info: {
-      title: 'API Localizaciones GTAHUB',
-      version: '1.0.0',
-      description: 'CRUD localizaciones para uso local',
-    },
-  },
-  apis: [__filename],
-};
-const swaggerSpec = swaggerJsdoc(swaggerOptions);
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+// Inicializar la base de datos antes de definir rutas
+(async () => {
+  try {
+    await db.initialize();
+    console.log('✅ Base de datos inicializada');
+  } catch (err) {
+    console.error('❌ Error inicializando la base de datos:', err);
+    process.exit(1);
+  }
 
-// Obtener todas las localizaciones
-app.get('/localizaciones', async (req: Request, res: Response) => {
-    try {
-        const localizaciones = await db.obtenerLocalizaciones();
-        res.json(localizaciones);
-    } catch (err) {
-        res.status(500).json({ error: 'Error al obtener localizaciones' });
-    }
-});
+  // Configuración Swagger (debe ir después de declarar app)
+  const swaggerOptions = {
+    definition: {
+      openapi: '3.0.0',
+      info: {
+        title: 'API Localizaciones GTAHUB',
+        version: '1.0.0',
+        description: 'CRUD localizaciones para uso local',
+      },
+    },
+    apis: [__filename],
+  };
+  const swaggerSpec = swaggerJsdoc(swaggerOptions);
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+  // Obtener todas las localizaciones
+  app.get('/localizaciones', async (req: Request, res: Response) => {
+      try {
+          const localizaciones = await db.obtenerLocalizaciones();
+          res.json(localizaciones);
+      } catch (err) {
+          res.status(500).json({ error: 'Error al obtener localizaciones' });
+      }
+  });
+
+  // ...resto de rutas y lógica...
+
+  app.listen(port, () => {
+    console.log(`API de localizaciones escuchando en http://localhost:${port}`);
+  });
+})();
 
 // Crear una localización
 app.post('/localizaciones', async (req: Request, res: Response) => {

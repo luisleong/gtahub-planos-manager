@@ -19,7 +19,18 @@ declare module 'discord.js' {
     }
 }
 
-const config = require('../clientes/n-c-s/config.json');
+
+const cliente = (process.env.CLIENTE || 'n-c-s').toLowerCase();
+const config = require(`../clientes/${cliente}/config.json`);
+
+// Usar CLIENT_ID desde .env y GUILD_ID desde config.json
+const CLIENT_ID: string = process.env.CLIENT_ID || ``;
+const GUILD_ID = config.GUILD_ID;
+
+if (!CLIENT_ID || !GUILD_ID) {
+    console.error(`❌ CLIENT_ID (.env): ${CLIENT_ID}, GUILD_ID (config): ${GUILD_ID}`);
+    throw new Error('CLIENT_ID o GUILD_ID no definidos. Verifica .env y config.json');
+}
 
 class GTAHUBPlanosBot {
     private client: Client;
@@ -73,9 +84,9 @@ class GTAHUBPlanosBot {
 
         // Registrar comandos en Discord
         try {
-            console.log('🔄 Registrando comandos slash...');
+            console.log(`🔄 Registrando comandos slash... CLIENT_ID: ${CLIENT_ID}, GUILD_ID: ${GUILD_ID}`);
             await this.rest.put(
-                Routes.applicationGuildCommands(config.CLIENT_ID, config.GUILD_ID),
+                Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
                 { body: commands },
             );
             console.log('✅ Comandos slash registrados correctamente.');

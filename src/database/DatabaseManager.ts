@@ -76,49 +76,39 @@ export class DatabaseManager {
     private dbPath: string;
 
     constructor() {
-        // Usar ruta de la base de datos desde .env, o por defecto data/planos.db
+        // Usar ruta de la base de datos desde .env, config, o por defecto data/<cliente>.db
         const dbPathEnv = process.env.DATABASE_PATH;
         let dbPathFinal: string;
         if (dbPathEnv) {
             dbPathFinal = path.isAbsolute(dbPathEnv) ? dbPathEnv : path.join(process.cwd(), dbPathEnv);
         } else {
+            // Intentar obtener DATABASE_PATH desde config del cliente
+            let clienteConfigPath = path.join(process.cwd(), 'clientes', (process.env.CLIENTE || 'n-c-s').toLowerCase(), 'config.json');
+            let dbPathConfig: string | undefined = undefined;
+            if (fs.existsSync(clienteConfigPath)) {
+                try {
+                    const configRaw = fs.readFileSync(clienteConfigPath, 'utf8');
+                    const configObj = JSON.parse(configRaw);
+                    if (configObj.DATABASE_PATH) {
+                        dbPathConfig = configObj.DATABASE_PATH;
+                    }
+                } catch (err) {
+                    console.warn('[DB] Error leyendo config.json del cliente:', err);
+                }
+            }
             const dataDir = path.join(process.cwd(), 'data');
             if (!fs.existsSync(dataDir)) {
                 fs.mkdirSync(dataDir, { recursive: true });
             }
-            dbPathFinal = path.join(dataDir, 'planos.db');
+            if (dbPathConfig) {
+                dbPathFinal = path.isAbsolute(dbPathConfig) ? dbPathConfig : path.join(process.cwd(), dbPathConfig);
+            } else {
+                const cliente = (process.env.CLIENTE || 'n-c-s').toLowerCase();
+                dbPathFinal = path.join(dataDir, `${cliente}.db`);
+            }
         }
         this.dbPath = dbPathFinal;
         this.db = new sqlite3.Database(this.dbPath);
-    }
-
-    /**
-     * Actualiza todas las URLs de fotos de localizaciones a la ruta dinámica del cliente actual
-     */
-    public async actualizarTodasLasFotoURLs(): Promise<number> {
-        const cliente = process.env.CLIENTE || 'n-c-s';
-        // Nombres de localizaciones soportadas
-        const nombres = [
-            'Cypress', 'Mesa', 'Mirror', 'Bunker', 'Mansion', 'Ratonera', 'Retruco'
-        ];
-        let actualizados = 0;
-        for (const nombre of nombres) {
-            const nuevaURL = `https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/clientes/${cliente.toLowerCase()}/images/${nombre.toLowerCase()}.png`;
-            await new Promise<void>((resolve, reject) => {
-                this.db.run(
-                    'UPDATE localizaciones SET foto_url = ? WHERE nombre = ?',
-                    [nuevaURL, nombre],
-                    function (err) {
-                        if (err) reject(err);
-                        else {
-                            if (this.changes > 0) actualizados += this.changes;
-                            resolve();
-                        }
-                    }
-                );
-            });
-        }
-        return actualizados;
     }
 
     /**
@@ -209,16 +199,6 @@ export class DatabaseManager {
     private async insertarDatosIniciales(): Promise<void> {
         // Obtener nombre del cliente desde .env o config
         const cliente = process.env.CLIENTE || 'n-c-s';
-        // Datos iniciales de localizaciones (usando imágenes específicas del cliente)
-        const localizacionesIniciales = [
-            { nombre: 'Cypress', foto_url: `https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/clientes/${cliente.toLowerCase()}/images/cypress.png` },
-            { nombre: 'Mesa', foto_url: `https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/clientes/${cliente.toLowerCase()}/images/mesa.png` },
-            { nombre: 'Mirror', foto_url: `https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/clientes/${cliente.toLowerCase()}/images/mirror.png` },
-            { nombre: 'Bunker', foto_url: `https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/clientes/${cliente.toLowerCase()}/images/bunker.png` },
-            { nombre: 'Mansion', foto_url: `https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/clientes/${cliente.toLowerCase()}/images/mansion.png` },
-            { nombre: 'Ratonera', foto_url: `https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/clientes/${cliente.toLowerCase()}/images/ratonera.png` },
-            { nombre: 'Retruco', foto_url: `https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/clientes/${cliente.toLowerCase()}/images/retruco.png` },
-        ];
 
         // Datos iniciales de planos (usando iconos SVG del repositorio)
         const planosIniciales = [
@@ -227,6 +207,19 @@ export class DatabaseManager {
             { nombre: 'Joyería', icono_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/planos/joyeria.svg', duracion_minutos: 1440 },
             { nombre: 'Arquitectonico', icono_url: 'https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/planos/arquitectonico.svg', duracion_minutos: 1040 }
         ];
+
+        let localizacionesIniciales: Array<{ nombre: string; foto_url?: string }> = [];
+        try {
+            const localizacionesPath = path.join(process.cwd(), 'clientes', cliente.toLowerCase(), 'localizaciones.json');
+            if (fs.existsSync(localizacionesPath)) {
+                const raw = fs.readFileSync(localizacionesPath, 'utf8');
+                localizacionesIniciales = JSON.parse(raw);
+            } else {
+                console.warn(`[DB] No existe el archivo de localizaciones iniciales: ${localizacionesPath}`);
+            }
+        } catch (err) {
+            console.error('[DB] Error leyendo localizaciones iniciales:', err);
+        }
 
         try {
             // Insertar localizaciones
@@ -266,11 +259,13 @@ export class DatabaseManager {
     public async obtenerLocalizaciones(): Promise<Localizacion[]> {
         return new Promise((resolve, reject) => {
             const sql = 'SELECT * FROM localizaciones WHERE disponible_para_fabricacion = 1 ORDER BY nombre';
-            
+            console.log('[DB] Ejecutando SQL obtenerLocalizaciones:', sql);
             this.db.all(sql, [], (err, rows) => {
                 if (err) {
+                    console.error('[DB] Error en obtenerLocalizaciones:', err);
                     reject(err);
                 } else {
+                    console.log('[DB] Resultado obtenerLocalizaciones:', rows);
                     resolve(rows as Localizacion[]);
                 }
             });
