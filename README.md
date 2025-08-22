@@ -31,7 +31,7 @@ Bot de Discord para gestionar planos de negocios en el servidor de GTA RP **GTAH
 ## 🚀 Instalación
 
 ### Prerrequisitos
-- Node.js 16+ 
+- Node.js 16+ (https://nodejs.org/en/download)
 - NPM o Yarn
 - Bot de Discord configurado
 
