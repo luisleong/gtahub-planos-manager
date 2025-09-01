@@ -4,5 +4,6 @@
   { "nombre": "Mirror", "foto_url": "https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/clientes/n-c-s/images/mirror.png" },
   { "nombre": "Bunker", "foto_url": "https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/clientes/n-c-s/images/bunker.png" },
   { "nombre": "Mansion", "foto_url": "https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/clientes/n-c-s/images/mansion.png" },
-  { "nombre": "Ratonera", "foto_url": "https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/clientes/n-c-s/images/ratonera.png" }
+  { "nombre": "Ratonera", "foto_url": "https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/clientes/n-c-s/images/ratonera.png" },
+  { "nombre": "Retruco", "foto_url": "https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/clientes/n-c-s/images/retruco.png" }
 ]
