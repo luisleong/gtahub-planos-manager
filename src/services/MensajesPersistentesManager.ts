@@ -118,8 +118,18 @@ export class MensajesPersistentesManager {
                 // IMPORTANTE: Marcar todas estas fabricaciones como notificadas para evitar spam futuro
                 for (const fabricacion of fabricacionesParaNotificar) {
                     try {
-                        await this.dbManager.marcarComoNotificado(fabricacion.id);
-                        console.log(`✅ Fabricación ${fabricacion.id} marcada como notificada desde MensajesPersistentes`);
+                        const marcado = await this.dbManager.marcarComoNotificado(fabricacion.id);
+                        if (marcado) {
+                            // Verificar en la base de datos que el campo realmente cambió
+                            const verificacion = await this.dbManager.obtenerFabricacionPorId(fabricacion.id);
+                            if (verificacion && verificacion.notificado) {
+                                console.log(`✅ Fabricación ${fabricacion.id} marcada y verificada como notificada en la base de datos.`);
+                            } else {
+                                console.error(`⚠️ Fabricación ${fabricacion.id} no aparece como notificada tras update. Valor actual:`, verificacion?.notificado);
+                            }
+                        } else {
+                            console.error(`❌ Error: No se pudo marcar la fabricación ${fabricacion.id} como notificada (marcado = false)`);
+                        }
                     } catch (error) {
                         console.error(`❌ Error marcando fabricación ${fabricacion.id} como notificada:`, error);
                     }

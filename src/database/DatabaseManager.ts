@@ -545,28 +545,46 @@ export class DatabaseManager {
         canalNotificacion?: string
     ): Promise<number> {
         return new Promise((resolve, reject) => {
-            const sql = `
-                INSERT INTO fabricaciones (
-                    id_localizacion, id_plano, propietario, propietario_id,
-                    timestamp_colocacion, notas, canal_notificacion
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            // Check for duplicate active fabrication
+            const checkSql = `
+                SELECT id FROM fabricaciones
+                WHERE id_localizacion = ? AND id_plano = ? AND propietario_id = ?
+                AND listo_para_recoger = 0 AND recogido = 0
+                ORDER BY id DESC LIMIT 1
             `;
-            
-            const params = [
-                idLocalizacion,
-                idPlano,
-                propietario,
-                propietarioId,
-                new Date().toISOString(),
-                notas || null,
-                canalNotificacion || null
-            ];
-
-            this.db.run(sql, params, function(err) {
+            this.db.get(checkSql, [idLocalizacion, idPlano, propietarioId], (err, row) => {
                 if (err) {
                     reject(err);
+                    return;
+                }
+                const fabricationId = row ? (row as { id: number }).id : undefined;
+                if (fabricationId) {
+                    // Duplicate found, return existing fabrication ID
+                    resolve(fabricationId);
                 } else {
-                    resolve(this.lastID);
+                    // No duplicate, insert new fabrication
+                    const sql = `
+                        INSERT INTO fabricaciones (
+                            id_localizacion, id_plano, propietario, propietario_id,
+                            timestamp_colocacion, notas, canal_notificacion
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    `;
+                    const params = [
+                        idLocalizacion,
+                        idPlano,
+                        propietario,
+                        propietarioId,
+                        new Date().toISOString(),
+                        notas || null,
+                        canalNotificacion || null
+                    ];
+                    this.db.run(sql, params, function(err) {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            resolve(this.lastID);
+                        }
+                    });
                 }
             });
         });

@@ -1019,10 +1019,16 @@ class GTAHUBPlanosBot {
 
         } catch (error) {
             console.error('Error en handleSeleccionPlanoPersistente:', error);
-            await interaction.reply({
-                content: '❌ Error al iniciar la fabricación.',
-                flags: MessageFlags.Ephemeral
-            });
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    content: '❌ Error al iniciar la fabricación.',
+                    flags: MessageFlags.Ephemeral
+                });
+            } else {
+                await interaction.editReply({
+                    content: '❌ Error al iniciar la fabricación.'
+                });
+            }
         } finally {
             // Limpiar el lock después de 2 segundos para permitir reintentos
             setTimeout(() => {
