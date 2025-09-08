@@ -6,6 +6,8 @@ import './api/server'; // Inicia el servidor Express y Swagger
 import { ChannelPermissions } from './utils/channelPermissions';
 import MensajesPersistentesManager from './services/MensajesPersistentesManager';
 import { DatabaseManager } from './database/DatabaseManager';
+import { RobosManager } from './database/RobosManager';
+import { MensajesRobosManager } from './services/MensajesRobosManager';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -16,6 +18,8 @@ declare module 'discord.js' {
         commands: Collection<string, any>;
         db: DatabaseManager;
         mensajesPersistentes: MensajesPersistentesManager;
+    robosManager?: RobosManager;
+    mensajesRobosManager?: MensajesRobosManager;
     }
 }
 
@@ -58,6 +62,15 @@ class GTAHUBPlanosBot {
         
         // Configurar manager de mensajes persistentes
         this.client.mensajesPersistentes = new MensajesPersistentesManager(this.client);
+
+        // Inicializar módulo de robos/malandros solo si el canal está configurado
+        if (config.MALANDROS_CHANNEL_ID) {
+            this.client.robosManager = new RobosManager(config.DATABASE_PATH || './data/planos.db');
+            this.client.mensajesRobosManager = new MensajesRobosManager(this.client, config.MALANDROS_CHANNEL_ID);
+            console.log('✅ Módulo de robos/malandros activado');
+        } else {
+            console.log('⚠️ Módulo de robos/malandros desactivado (canal no configurado en config.json)');
+        }
     }
 
     /**
@@ -223,6 +236,10 @@ class GTAHUBPlanosBot {
             await this.procesarModalEditarPlano(interaction);
         } else if (customId.startsWith('modal_editar_localizacion_')) {
             await this.procesarModalEditarLocalizacion(interaction);
+        } else if (customId.startsWith('modal_malandro_') || customId.startsWith('modal_robo_')) {
+            if (this.client.mensajesRobosManager) {
+                await this.client.mensajesRobosManager.handleModal(interaction, customId);
+            }
         } else {
             console.warn(`Modal no manejado: ${customId}`);
         }
@@ -350,16 +367,17 @@ class GTAHUBPlanosBot {
                 console.log('Menús de fabricación rápida manejados por el comando correspondiente');
                 break;
             default:
-                // ...
+                if (customId.startsWith('malandro_select_') || customId.startsWith('robo_select_')) {
+                    if (this.client.mensajesRobosManager) {
+                        await this.client.mensajesRobosManager.handleSelectMenu(interaction, customId, selectedValue);
+                        return;
+                    }
+                }
                 if (customId.startsWith('select_plano_persistente_')) {
-                    // ...
                     await this.handleSeleccionPlanoPersistente(interaction, customId, selectedValue);
-                    // ...
                     return; // IMPORTANTE: Salir después de manejar
                 }
-                // Verificar si es un menú del panel de localizaciones (menos específico)
                 if (customId.startsWith('select_plano_') && !customId.includes('persistente')) {
-                // ...
                     await this.handlePanelLocalizacionesPlano(interaction, customId, selectedValue);
                     return; // IMPORTANTE: Salir después de manejar
                 }
@@ -391,6 +409,16 @@ class GTAHUBPlanosBot {
             await this.handleFabricarRapidoButton(interaction, customId);
         } else if (customId.startsWith('poner_persistente_') || customId.startsWith('recoger_persistente_')) {
             await this.handleBotonPersistente(interaction, customId);
+        } else if (customId.startsWith('malandro_')) {
+            // Botones para malandros: agregar, eliminar, seleccionar
+            if (this.client.mensajesRobosManager) {
+                await this.client.mensajesRobosManager.handleButton(interaction, customId);
+            }
+        } else if (customId.startsWith('robo_')) {
+            // Botones para robos: marcar robo, ver historial, etc
+            if (this.client.mensajesRobosManager) {
+                await this.client.mensajesRobosManager.handleButton(interaction, customId);
+            }
         } else if (customId.startsWith('ejecutar_limpieza_') || customId === 'cancelar_limpieza') {
             // Los botones de limpieza se manejan en el propio comando
             console.log('Botón de limpieza manejado por el comando correspondiente');
