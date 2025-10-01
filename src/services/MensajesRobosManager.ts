@@ -2,6 +2,8 @@ import { Client, TextChannel, EmbedBuilder, ActionRowBuilder, ButtonBuilder, But
 import { RobosManager } from '../database/RobosManager';
 
 export class MensajesRobosManager {
+    mensajeMalandrosId?: string;
+    mensajeRobosId?: string;
 
     /**
      * Maneja interacciones de botones para robos/malandros
@@ -114,11 +116,14 @@ export class MensajesRobosManager {
         if (customId === 'modal_malandro_agregar') {
             const nombre = interaction.fields.getTextInputValue('nombre_malandro');
             await this.robosManager.agregarMalandro(nombre);
-            await interaction.reply({ content: `✅ Malandro agregado: ${nombre}`, ephemeral: true });
-            // Actualizar mensaje de malandros
-            if (interaction.channel) {
-                await this.enviarMensajeMalandros(interaction.channel.id);
+            // Actualizar solo el mensaje persistente de malandros
+            const canal = interaction.channel as TextChannel;
+            if (canal) {
+                // Buscar el mensaje persistente de malandros
+                // Si tienes el mensajeId guardado, pásalo aquí:
+                await this.enviarMensajeMalandros(canal.id, this.mensajeMalandrosId);
             }
+            await interaction.reply({ content: `✅ Malandro agregado: ${nombre}`, ephemeral: true });
         } else {
             await interaction.reply({ content: `Modal: ${customId} no reconocido.`, ephemeral: true });
         }
@@ -138,11 +143,14 @@ export class MensajesRobosManager {
         const canal = await this.client.channels.fetch(channelId) as TextChannel;
         if (!canal) throw new Error('Canal de robos no encontrado');
 
+        const fecha = new Date().toLocaleString('es-MX', { hour12: false });
         const embed = new EmbedBuilder()
             .setTitle('Marcaje de Robo')
             .setDescription('Marca tu robo y selecciona el malandro que lo realiza.')
             .setImage('https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/robotienda.jpeg')
-            .setColor(0xFF4444);
+            .setColor(0xFF4444)
+            .setFooter({ text: `Última actualización: ${fecha}` })
+            .setTimestamp();
 
         const marcarRoboBtn = new ButtonBuilder()
             .setCustomId('marcar_robo')
@@ -151,11 +159,30 @@ export class MensajesRobosManager {
 
         const row = new ActionRowBuilder<ButtonBuilder>().addComponents(marcarRoboBtn);
 
-        if (mensajeId) {
-            const mensaje = await canal.messages.fetch(mensajeId);
-            await mensaje.edit({ embeds: [embed], components: [row] });
+        let id = mensajeId;
+        if (!id) {
+            const info = await this.robosManager.obtenerMensajeRobos();
+            if (info?.mensaje_id) id = info.mensaje_id;
+        }
+        if (id) {
+            try {
+                const mensaje = await canal.messages.fetch(id);
+                await mensaje.edit({ embeds: [embed], components: [row] });
+                this.mensajeRobosId = id;
+            } catch (err: any) {
+                if (err.code === 10008 || err.message?.includes('Unknown Message')) {
+                    // El mensaje fue borrado, crear uno nuevo y actualizar el ID en la base
+                    const nuevoMensaje = await canal.send({ embeds: [embed], components: [row] });
+                    await this.robosManager.guardarMensajeRobos(nuevoMensaje.id, canal.id);
+                    this.mensajeRobosId = nuevoMensaje.id;
+                } else {
+                    throw err;
+                }
+            }
         } else {
-            await canal.send({ embeds: [embed], components: [row] });
+            const mensaje = await canal.send({ embeds: [embed], components: [row] });
+            await this.robosManager.guardarMensajeRobos(mensaje.id, canal.id);
+            this.mensajeRobosId = mensaje.id;
         }
     }
 
@@ -167,12 +194,52 @@ export class MensajesRobosManager {
         if (!canal) throw new Error('Canal de malandros no encontrado');
 
         const malandros = await this.robosManager.obtenerMalandros();
+        let listos: string[] = [];
+        let cooldown: string[] = [];
+        for (const m of malandros) {
+            let estatus = 'A robar!';
+            let emoji = '🟢';
+            let barra = '██████████';
+            let minutosRestantes = 0;
+            let minutos = 0;
+            const ultimoRobo = await this.robosManager.obtenerUltimoRobo(m.id);
+            if (ultimoRobo && ultimoRobo.fecha_robo) {
+                const fechaUltimo = new Date(ultimoRobo.fecha_robo).getTime();
+                const ahora = Date.now();
+                minutos = (ahora - fechaUltimo) / 60000;
+                minutosRestantes = Math.max(0, 35 - minutos);
+                if (minutos < 5) {
+                    estatus = 'Escondete!';
+                    emoji = '🔴';
+                    barra = '█---------';
+                    cooldown.push(`• ${m.nombre} ${emoji} [${barra}] (${estatus}) — faltan ${minutosRestantes.toFixed(1)} min`);
+                    continue;
+                } else if (minutos < 35) {
+                    estatus = 'No robes aun!';
+                    emoji = '🟡';
+                    // Barra de progreso proporcional a los 35 min
+                    const blocks = Math.round((minutos/35)*10);
+                    barra = '█'.repeat(blocks) + '-'.repeat(10-blocks);
+                    cooldown.push(`• ${m.nombre} ${emoji} [${barra}] (${estatus}) — faltan ${minutosRestantes.toFixed(1)} min`);
+                    continue;
+                }
+            }
+            // Listos para robar
+            barra = '██████████';
+            listos.push(`• ${m.nombre} ${emoji} [${barra}] (${estatus})`);
+        }
+        if (malandros.length === 0) listos.push('No hay malandros registrados.');
+        let lista = '';
+        if (listos.length > 0) lista += '**Listos para robar**\n' + listos.join('\n') + '\n';
+        if (cooldown.length > 0) lista += '\n**En cooldown**\n' + cooldown.join('\n') + '\n';
+        const fecha = new Date().toLocaleString('es-MX', { hour12: false });
         const embed = new EmbedBuilder()
             .setTitle('Administrar Malandros')
-            .setDescription('Lista de malandros disponibles para robos.')
+            .setDescription(lista)
             .setImage('https://raw.githubusercontent.com/luisleong/gtahub-planos-manager/main/src/images/malandros.jpg')
             .setColor(0x5865F2)
-            .addFields(malandros.map(m => ({ name: m.nombre, value: `ID: ${m.id}`, inline: true })));
+            .setFooter({ text: `Última actualización: ${fecha}` })
+            .setTimestamp();
 
         const agregarBtn = new ButtonBuilder()
             .setCustomId('agregar_malandro')
@@ -185,11 +252,39 @@ export class MensajesRobosManager {
 
         const row = new ActionRowBuilder<ButtonBuilder>().addComponents(agregarBtn, eliminarBtn);
 
-        if (mensajeId) {
-            const mensaje = await canal.messages.fetch(mensajeId);
-            await mensaje.edit({ embeds: [embed], components: [row] });
-        } else {
-            await canal.send({ embeds: [embed], components: [row] });
+        let id = mensajeId;
+        if (!id) {
+            const info = await this.robosManager.obtenerMensajeMalandros();
+            if (info?.mensaje_id) id = info.mensaje_id;
         }
+        if (id) {
+            try {
+                const mensaje = await canal.messages.fetch(id);
+                await mensaje.edit({ embeds: [embed], components: [row] });
+                this.mensajeMalandrosId = id;
+            } catch (err: any) {
+                if (err.code === 10008 || err.message?.includes('Unknown Message')) {
+                    // El mensaje fue borrado, crear uno nuevo y actualizar el ID en la base
+                    const nuevoMensaje = await canal.send({ embeds: [embed], components: [row] });
+                    await this.robosManager.guardarMensajeMalandros(nuevoMensaje.id, canal.id);
+                    this.mensajeMalandrosId = nuevoMensaje.id;
+                } else {
+                    throw err;
+                }
+            }
+        } else {
+            const mensaje = await canal.send({ embeds: [embed], components: [row] });
+            await this.robosManager.guardarMensajeMalandros(mensaje.id, canal.id);
+            this.mensajeMalandrosId = mensaje.id;
+        }
+    }
+    /**
+     * Actualiza automáticamente los mensajes persistentes cada minuto
+     */
+    iniciarActualizacionesAutomaticas(channelId: string) {
+        setInterval(async () => {
+            await this.enviarMensajeRobos(channelId);
+            await this.enviarMensajeMalandros(channelId);
+        }, 60000);
     }
 }

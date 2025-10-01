@@ -1,6 +1,18 @@
+    
 import sqlite3 from 'sqlite3';
 import path from 'path';
 import fs from 'fs';
+
+export interface Servicio {
+    id: number;
+    usuario_id: string;
+    canal_id: string;
+    inicio: string;
+    fin?: string;
+    notas?: string;
+    created_at: string;
+    updated_at: string;
+}
 
 export interface Localizacion {
     id: number;
@@ -9,6 +21,7 @@ export interface Localizacion {
     disponible_para_fabricacion: boolean;
     mensaje_persistente_id?: string;
     canal_persistente_id?: string;
+    propietario_id?: string;
     created_at: string;
     updated_at: string;
 }
@@ -49,6 +62,79 @@ export interface FabricacionCompleta extends Fabricacion {
 }
 
 export class DatabaseManager {
+    /** Obtener todos los servicios recientes (ordenados por inicio DESC) */
+    public async obtenerServiciosRecientes(): Promise<Servicio[]> {
+        return new Promise((resolve, reject) => {
+            const sql = `SELECT * FROM servicios ORDER BY inicio DESC`;
+            this.db.all(sql, [], (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows as Servicio[]);
+            });
+        });
+    }
+    /** Guardar notas en un servicio */
+    public async registrarNotasServicio(servicioId: number, notas: string): Promise<boolean> {
+        return new Promise((resolve, reject) => {
+            const sql = `UPDATE servicios SET notas = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
+            this.db.run(sql, [notas, servicioId], function(err) {
+                if (err) reject(err);
+                else resolve(this.changes > 0);
+            });
+        });
+    }
+    /** Inicializar tabla de servicios */
+    public async inicializarTablaServicios(): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const sql = `CREATE TABLE IF NOT EXISTS servicios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                usuario_id TEXT NOT NULL,
+                canal_id TEXT NOT NULL,
+                inicio TEXT NOT NULL,
+                fin TEXT,
+                notas TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )`;
+            this.db.run(sql, [], (err) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+    }
+
+    /** Registrar inicio de servicio */
+    public async registrarInicioServicio(usuarioId: string, canalId: string, notas?: string): Promise<number> {
+        return new Promise((resolve, reject) => {
+            const sql = `INSERT INTO servicios (usuario_id, canal_id, inicio, notas) VALUES (?, ?, ?, ?)`;
+            const params = [usuarioId, canalId, new Date().toISOString(), notas || null];
+            this.db.run(sql, params, function(err) {
+                if (err) reject(err);
+                else resolve(this.lastID);
+            });
+        });
+    }
+
+    /** Registrar fin de servicio */
+    public async registrarFinServicio(servicioId: number): Promise<boolean> {
+        return new Promise((resolve, reject) => {
+            const sql = `UPDATE servicios SET fin = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
+            this.db.run(sql, [new Date().toISOString(), servicioId], function(err) {
+                if (err) reject(err);
+                else resolve(this.changes > 0);
+            });
+        });
+    }
+
+    /** Obtener servicios por usuario */
+    public async obtenerServiciosPorUsuario(usuarioId: string): Promise<Servicio[]> {
+        return new Promise((resolve, reject) => {
+            const sql = `SELECT * FROM servicios WHERE usuario_id = ? ORDER BY inicio DESC`;
+            this.db.all(sql, [usuarioId], (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows as Servicio[]);
+            });
+        });
+    }
     /**
      * Editar una localización existente
      */
@@ -68,6 +154,39 @@ export class DatabaseManager {
                             resolve(row as Localizacion || null);
                         }
                     });
+                }
+            });
+        });
+    }
+    /** Guardar el ID del mensaje persistente de RRHH */
+    public async guardarMensajeRRHH(mensajeId: string, canalId: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            this.db.run(`CREATE TABLE IF NOT EXISTS mensajes_rrhh (id INTEGER PRIMARY KEY, mensaje_id TEXT, canal_id TEXT);`, [], (err) => {
+                if (err) return reject(err);
+                this.db.run(`DELETE FROM mensajes_rrhh;`, [], (err2) => {
+                    if (err2) return reject(err2);
+                    this.db.run(`INSERT INTO mensajes_rrhh (id, mensaje_id, canal_id) VALUES (1, ?, ?);`, [mensajeId, canalId], (err3) => {
+                        if (err3) reject(err3);
+                        else resolve();
+                    });
+                });
+            });
+        });
+    }
+
+    /** Obtener el mensaje persistente de RRHH */
+    public async obtenerMensajeRRHH(): Promise<{ mensaje_id: string, canal_id: string } | null> {
+        return new Promise((resolve, reject) => {
+            this.db.get(`SELECT mensaje_id, canal_id FROM mensajes_rrhh WHERE id = 1;`, [], (err, row) => {
+                if (err) {
+                    reject(err);
+                } else if (row !== null && typeof row === 'object' && 'mensaje_id' in row && 'canal_id' in row && typeof (row as any).mensaje_id === 'string' && typeof (row as any).canal_id === 'string') {
+                    resolve({
+                        mensaje_id: (row as any).mensaje_id,
+                        canal_id: (row as any).canal_id
+                    });
+                } else {
+                    resolve(null);
                 }
             });
         });
@@ -318,20 +437,35 @@ export class DatabaseManager {
         });
     }
 
-    public async actualizarMensajePersistente(id: number, mensajeId: string, canalId: string): Promise<boolean> {
+    public async actualizarMensajePersistente(id: number, mensajeId: string, canalId: string, propietarioId?: string): Promise<boolean> {
         return new Promise((resolve, reject) => {
-            const sql = `
-                UPDATE localizaciones 
-                SET mensaje_persistente_id = ?, canal_persistente_id = ?, updated_at = CURRENT_TIMESTAMP 
-                WHERE id = ?
-            `;
-            
-            this.db.run(sql, [mensajeId, canalId, id], function(err) {
+            let sql: string;
+            let params: any[];
+            if (typeof propietarioId === 'string') {
+                sql = `UPDATE localizaciones SET mensaje_persistente_id = ?, canal_persistente_id = ?, propietario_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
+                params = [mensajeId, canalId, propietarioId, id];
+            } else {
+                sql = `UPDATE localizaciones SET mensaje_persistente_id = ?, canal_persistente_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
+                params = [mensajeId, canalId, id];
+            }
+            this.db.run(sql, params, function(err) {
                 if (err) {
                     reject(err);
                 } else {
                     resolve(this.changes > 0);
                 }
+            });
+        });
+    }
+
+    /** Obtener propietario del canal por canalId */
+    public async obtenerPropietarioPorCanal(canalId: string): Promise<string | null> {
+        return new Promise((resolve, reject) => {
+            const sql = 'SELECT propietario_id FROM localizaciones WHERE canal_persistente_id = ? LIMIT 1';
+            this.db.get(sql, [canalId], (err, row) => {
+                if (err) reject(err);
+                else if (row && typeof row === 'object' && 'propietario_id' in row) resolve((row as any).propietario_id);
+                else resolve(null);
             });
         });
     }

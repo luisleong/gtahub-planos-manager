@@ -66,7 +66,7 @@ class GTAHUBPlanosBot {
         // Inicializar módulo de robos/malandros solo si el canal está configurado
         if (config.MALANDROS_CHANNEL_ID) {
             this.client.robosManager = new RobosManager(config.DATABASE_PATH || './data/planos.db');
-            this.client.mensajesRobosManager = new MensajesRobosManager(this.client, config.MALANDROS_CHANNEL_ID);
+            this.client.mensajesRobosManager = new MensajesRobosManager(this.client, this.client.robosManager);
             console.log('✅ Módulo de robos/malandros activado');
         } else {
             console.log('⚠️ Módulo de robos/malandros desactivado (canal no configurado en config.json)');
@@ -77,12 +77,20 @@ class GTAHUBPlanosBot {
      * Cargar todos los comandos desde la carpeta commands
      */
     private async loadCommands(): Promise<void> {
+
         const commandsPath = join(__dirname, 'commands');
         const commandFiles = readdirSync(commandsPath).filter(file => file.endsWith('.js') || file.endsWith('.ts'));
 
         const commands = [];
 
         for (const file of commandFiles) {
+            // Si el módulo de robos/malandros está desactivado, omitir sus comandos
+            if (!config.MALANDROS_CHANNEL_ID && (
+                file.includes('robos') || file.includes('malandros') || file.includes('fabricar') || file.includes('panel-localizaciones') ||
+                file.includes('localizacion') || file.includes('plano') || file.includes('listar-fabricaciones') || file.includes('recoger-fabricacion') || file.includes('setup-canal-persistente') || file.includes('limpiar-base-datos')
+            )) {
+                continue;
+            }
             const filePath = join(commandsPath, file);
             const command = require(filePath).default || require(filePath);
 
@@ -117,9 +125,10 @@ class GTAHUBPlanosBot {
             console.log(`🚀 ${this.client.user?.tag} está online!`);
             console.log(`📊 Conectado a ${this.client.guilds.cache.size} servidor(es)`);
             
-            // Inicializar base de datos
+            // Inicializar base de datos y tabla servicios
             await this.client.db.initialize();
-            console.log('🗄️ Base de datos inicializada');
+            await this.client.db.inicializarTablaServicios();
+            console.log('🗄️ Base de datos y tabla servicios inicializadas');
             
             // Iniciar actualizaciones automáticas cada 5 minutos
             console.log('🔧 Iniciando sistema de actualizaciones automáticas...');
@@ -232,7 +241,29 @@ class GTAHUBPlanosBot {
     private async handleModalSubmit(interaction: any): Promise<void> {
         const { customId } = interaction;
 
-        if (customId.startsWith('modal_editar_plano_')) {
+        if (customId.startsWith('modal_finalizar_servicio_')) {
+            // Guardar datos del modal en el servicio
+            const servicioId = parseInt(customId.replace('modal_finalizar_servicio_', ''));
+            const clientesAtendidos = interaction.fields.getTextInputValue('clientes_atendidos');
+            const novedades = interaction.fields.getTextInputValue('novedades');
+            let notas = `Clientes atendidos: ${clientesAtendidos}`;
+            if (novedades && novedades.trim() !== '') {
+                notas += `\nNovedades: ${novedades}`;
+            }
+            // Guardar notas y finalizar servicio
+            await this.client.db.registrarFinServicio(servicioId);
+            await this.client.db.registrarNotasServicio(servicioId, notas);
+            await interaction.reply({ content: '🔴 Servicio finalizado y datos registrados.', ephemeral: true });
+            // Actualizar panel
+            try {
+                const { sendPanelServicio } = require('./commands/panel-servicio');
+                const canal = interaction.channel;
+                const username = interaction.user.username;
+                await sendPanelServicio(canal, interaction.user.id, username);
+            } catch (err) {
+                console.error('[ServicePanel] Error actualizando panel:', err);
+            }
+        } else if (customId.startsWith('modal_editar_plano_')) {
             await this.procesarModalEditarPlano(interaction);
         } else if (customId.startsWith('modal_editar_localizacion_')) {
             await this.procesarModalEditarLocalizacion(interaction);
@@ -391,46 +422,53 @@ class GTAHUBPlanosBot {
     private async handleButtonInteraction(interaction: any): Promise<void> {
         const { customId } = interaction;
 
-        if (customId.startsWith('confirmar_eliminar_loc_')) {
-            const localizacionId = parseInt(customId.split('_')[3]);
-            await this.ejecutarEliminacionLocalizacion(interaction, localizacionId);
-        } else if (customId.startsWith('confirmar_eliminar_plano_')) {
-            const planoId = parseInt(customId.split('_')[3]);
-            await this.ejecutarEliminacionPlano(interaction, planoId);
-        } else if (customId.startsWith('eliminar_loc_')) {
-            const localizacionId = parseInt(customId.split('_')[2]);
-            await this.confirmarEliminarLocalizacion(interaction, localizacionId);
-        } else if (customId.startsWith('eliminar_plano_')) {
-            const planoId = parseInt(customId.split('_')[2]);
-            await this.confirmarEliminarPlano(interaction, planoId);
-        } else if (customId.startsWith('dashboard_')) {
-            await this.handleDashboardButton(interaction, customId);
-        } else if (customId.startsWith('fabricar_rapido_')) {
-            await this.handleFabricarRapidoButton(interaction, customId);
-        } else if (customId.startsWith('poner_persistente_') || customId.startsWith('recoger_persistente_')) {
-            await this.handleBotonPersistente(interaction, customId);
-        } else if (customId.startsWith('malandro_')) {
-            // Botones para malandros: agregar, eliminar, seleccionar
-            if (this.client.mensajesRobosManager) {
-                await this.client.mensajesRobosManager.handleButton(interaction, customId);
+        // Handler para botones de servicio (solo el mecánico puede usar)
+        if (customId === 'iniciar_servicio' || customId === 'finalizar_servicio') {
+            // Permitir que cualquier usuario pulse el botón
+            if (customId === 'iniciar_servicio') {
+                await this.client.db.registrarInicioServicio(interaction.user.id, interaction.channelId);
+                await interaction.reply({ content: '🟢 Has iniciado tu servicio.', ephemeral: true });
+            } else {
+                const servicios = await this.client.db.obtenerServiciosPorUsuario(interaction.user.id);
+                const servicioActivo = servicios.find((s: any) => !s.fin);
+                if (servicioActivo) {
+                    // Mostrar modal para datos adicionales
+                    const modal = new ModalBuilder()
+                        .setCustomId(`modal_finalizar_servicio_${servicioActivo.id}`)
+                        .setTitle('Finalizar servicio')
+                        .addComponents(
+                            new ActionRowBuilder<TextInputBuilder>().addComponents(
+                                new TextInputBuilder()
+                                    .setCustomId('clientes_atendidos')
+                                    .setLabel('¿Cuántos clientes atendiste?')
+                                    .setStyle(TextInputStyle.Short)
+                                    .setRequired(true)
+                            ),
+                            new ActionRowBuilder<TextInputBuilder>().addComponents(
+                                new TextInputBuilder()
+                                    .setCustomId('novedades')
+                                    .setLabel('¿Hubo alguna novedad? (opcional)')
+                                    .setStyle(TextInputStyle.Paragraph)
+                                    .setRequired(false)
+                            )
+                        );
+                    await interaction.showModal(modal);
+                } else {
+                    await interaction.reply({ content: 'No tienes un servicio activo.', ephemeral: true });
+                }
             }
-        } else if (customId.startsWith('robo_')) {
-            // Botones para robos: marcar robo, ver historial, etc
-            if (this.client.mensajesRobosManager) {
-                await this.client.mensajesRobosManager.handleButton(interaction, customId);
+            // Actualizar el panel de servicio en el canal (se hace tras submit del modal)
+            try {
+                const { sendPanelServicio } = require('./commands/panel-servicio');
+                const canal = interaction.channel;
+                const username = interaction.user.username;
+                await sendPanelServicio(canal, interaction.user.id, username);
+            } catch (err) {
+                console.error('[ServicePanel] Error actualizando panel:', err);
             }
-        } else if (customId.startsWith('ejecutar_limpieza_') || customId === 'cancelar_limpieza') {
-            // Los botones de limpieza se manejan en el propio comando
-            console.log('Botón de limpieza manejado por el comando correspondiente');
-        } else if (customId === 'cancelar_eliminacion') {
-            await interaction.update({
-                content: '❌ Eliminación cancelada.',
-                embeds: [],
-                components: []
-            });
-        } else {
-            console.warn(`Botón no manejado: ${customId}`);
+            return;
         }
+        // ...existing code...
     }
 
     /**
@@ -1172,10 +1210,21 @@ class GTAHUBPlanosBot {
         try {
             const ahora = new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid' });
             console.log(`🔄 [${ahora}] Iniciando actualización automática de mensajes persistentes...`);
-            
+
+            // Actualizar mensaje persistente de malandros/robos
+            if (this.client.mensajesRobosManager && this.client.robosManager) {
+                const canalId = (require(`../clientes/${cliente}/config.json`).MALANDROS_CHANNEL_ID);
+                if (canalId) {
+                    await this.client.mensajesRobosManager.enviarMensajeMalandros(canalId);
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    await this.client.mensajesRobosManager.enviarMensajeRobos(canalId);
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            }
+
             // Primero, detectar y marcar fabricaciones completadas
             await this.detectarFabricacionesCompletadas();
-            
+
             // Obtener todas las localizaciones que tienen mensajes persistentes
             const localizaciones = await this.client.db.obtenerTodasLasLocalizaciones();
             const localizacionesConMensajes = localizaciones.filter((loc: any) => 
@@ -1183,7 +1232,7 @@ class GTAHUBPlanosBot {
             );
 
             console.log(`📍 Encontradas ${localizacionesConMensajes.length} localizaciones con mensajes persistentes`);
-            
+
             if (localizacionesConMensajes.length === 0) {
                 console.log('⚠️ No hay mensajes persistentes configurados. Usa /setup-canal-persistente');
                 return;
