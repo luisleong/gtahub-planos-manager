@@ -62,6 +62,46 @@ export interface FabricacionCompleta extends Fabricacion {
 }
 
 export class DatabaseManager {
+    private db: sqlite3.Database;
+    private dbPath: string;
+
+    constructor() {
+        // Usar ruta de la base de datos desde .env, config, o por defecto data/<cliente>.db
+        const dbPathEnv = process.env.DATABASE_PATH;
+        let dbPathFinal: string;
+        if (dbPathEnv) {
+            dbPathFinal = path.isAbsolute(dbPathEnv) ? dbPathEnv : path.join(process.cwd(), dbPathEnv);
+        } else {
+            // Intentar obtener DATABASE_PATH desde config del cliente
+            let clienteConfigPath = path.join(process.cwd(), 'clientes', (process.env.CLIENTE || 'n-c-s').toLowerCase(), 'config.json');
+            let dbPathConfig: string | undefined = undefined;
+            if (fs.existsSync(clienteConfigPath)) {
+                try {
+                    const configRaw = fs.readFileSync(clienteConfigPath, 'utf8');
+                    const configObj = JSON.parse(configRaw);
+                    if (configObj.DATABASE_PATH) {
+                        dbPathConfig = configObj.DATABASE_PATH;
+                    }
+                } catch (err) {
+                    console.warn('[DB] Error leyendo config.json del cliente:', err);
+                }
+            }
+            const dataDir = path.join(process.cwd(), 'data');
+            if (!fs.existsSync(dataDir)) {
+                fs.mkdirSync(dataDir, { recursive: true });
+            }
+            if (dbPathConfig) {
+                dbPathFinal = path.isAbsolute(dbPathConfig) ? dbPathConfig : path.join(process.cwd(), dbPathConfig);
+            } else {
+                const cliente = (process.env.CLIENTE || 'n-c-s').toLowerCase();
+                dbPathFinal = path.join(dataDir, `${cliente}.db`);
+            }
+        }
+        this.dbPath = dbPathFinal;
+        this.db = new sqlite3.Database(this.dbPath);
+        console.log(`[DB] Usando base de datos: ${this.dbPath}`);
+    }
+
     /** Obtener todos los servicios recientes (ordenados por inicio DESC) */
     public async obtenerServiciosRecientes(): Promise<Servicio[]> {
         return new Promise((resolve, reject) => {
@@ -190,44 +230,6 @@ export class DatabaseManager {
                 }
             });
         });
-    }
-    private db: sqlite3.Database;
-    private dbPath: string;
-
-    constructor() {
-        // Usar ruta de la base de datos desde .env, config, o por defecto data/<cliente>.db
-        const dbPathEnv = process.env.DATABASE_PATH;
-        let dbPathFinal: string;
-        if (dbPathEnv) {
-            dbPathFinal = path.isAbsolute(dbPathEnv) ? dbPathEnv : path.join(process.cwd(), dbPathEnv);
-        } else {
-            // Intentar obtener DATABASE_PATH desde config del cliente
-            let clienteConfigPath = path.join(process.cwd(), 'clientes', (process.env.CLIENTE || 'n-c-s').toLowerCase(), 'config.json');
-            let dbPathConfig: string | undefined = undefined;
-            if (fs.existsSync(clienteConfigPath)) {
-                try {
-                    const configRaw = fs.readFileSync(clienteConfigPath, 'utf8');
-                    const configObj = JSON.parse(configRaw);
-                    if (configObj.DATABASE_PATH) {
-                        dbPathConfig = configObj.DATABASE_PATH;
-                    }
-                } catch (err) {
-                    console.warn('[DB] Error leyendo config.json del cliente:', err);
-                }
-            }
-            const dataDir = path.join(process.cwd(), 'data');
-            if (!fs.existsSync(dataDir)) {
-                fs.mkdirSync(dataDir, { recursive: true });
-            }
-            if (dbPathConfig) {
-                dbPathFinal = path.isAbsolute(dbPathConfig) ? dbPathConfig : path.join(process.cwd(), dbPathConfig);
-            } else {
-                const cliente = (process.env.CLIENTE || 'n-c-s').toLowerCase();
-                dbPathFinal = path.join(dataDir, `${cliente}.db`);
-            }
-        }
-        this.dbPath = dbPathFinal;
-        this.db = new sqlite3.Database(this.dbPath);
     }
 
     /**
@@ -700,8 +702,9 @@ export class DatabaseManager {
                     const sql = `
                         INSERT INTO fabricaciones (
                             id_localizacion, id_plano, propietario, propietario_id,
-                            timestamp_colocacion, notas, canal_notificacion
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                            timestamp_colocacion, notas, canal_notificacion,
+                            listo_para_recoger, recogido, notificado
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0)
                     `;
                     const params = [
                         idLocalizacion,

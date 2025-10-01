@@ -421,6 +421,15 @@ class GTAHUBPlanosBot {
      */
     private async handleButtonInteraction(interaction: any): Promise<void> {
         const { customId } = interaction;
+        // DEBUG: Log global para todas las interacciones de botón
+        console.log(`[BUTTON] Interacción recibida: ${customId} por ${interaction.user.tag}`);
+
+        // Manejo para poner_persistente_
+        if (customId.startsWith('poner_persistente_')) {
+            console.log(`[BUTTON] Entró al handler de poner_persistente_: ${customId}`);
+            await this.handleBotonPersistente(interaction, customId);
+            return;
+        }
 
         // Handler para botones de servicio (solo el mecánico puede usar)
         if (customId === 'iniciar_servicio' || customId === 'finalizar_servicio') {
@@ -1197,9 +1206,9 @@ class GTAHUBPlanosBot {
         const intervalId = setInterval(async () => {
             console.log('⏰ Ejecutando actualización automática programada...');
             await this.actualizarTodosMensajesPersistentes();
-        }, 1 * 60 * 1000);
+        }, 3 * 60 * 1000); // 3 minutos
 
-        console.log('🔄 Sistema de actualizaciones automáticas iniciado (cada 1 minuto)');
+        console.log('🔄 Sistema de actualizaciones automáticas iniciado (cada 3 minutos)');
         console.log(`🆔 Interval ID: ${intervalId}`);
     }
 
